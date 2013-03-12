@@ -174,6 +174,16 @@ class Network:
             # pass in the pre population encoded output function to the post population, connecting them for theano
             post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
 
+    def learn(self, pre, post, error, pstc=0.01, weight_matrix=None):
+        """Add a connection with learning between pre and post, modulated by error
+
+        :param Ensemble pre: the pre-synaptic population
+        :param Ensemble post: the post-synaptic population
+        :param Ensemble error: the population that provides the error signal
+        :param list weight_matrix: the initial connection weights with which to start
+        """
+        post.add_learned_termination(pre, error, pstc, weight_matrix)
+
     def make(self, name, *args, **kwargs): 
         """Create and return an ensemble of neurons. Note that all ensembles are actually arrays of length 1        
         :returns: the newly created ensemble      

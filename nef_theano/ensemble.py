@@ -5,6 +5,7 @@ import numpy
 
 import neuron
 import origin
+import learned_termination
 
 def make_encoders(neurons, dimensions, srng, encoders=None):
     """Generates a set of encoders
@@ -126,6 +127,7 @@ class Ensemble:
         self.add_origin('X', func=None, eval_points=self.eval_points) # make default origin
         
         self.accumulators = {} # dictionary of accumulators tracking terminations with different pstc values
+        self.learned_terminations = [] # list of learned terminations on ensemble
     
     def add_filtered_input(self, pstc, decoded_input=None, encoded_input=None):
         """Create a new termination that takes the given input (a theano object) and filters it with the given pstc
@@ -150,6 +152,27 @@ class Ensemble:
             self.accumulators[pstc].add_decoded_input(TT.true_div(decoded_input, self.radius)) 
         else: 
             self.accumulators[pstc].add_encoded_input(encoded_input)
+   
+    #TODO: make this support specifying error origins 
+    def add_learned_termination(self, pre, error, pstc, weight_matrix=None):
+        """Adds a learned termination to the ensemble. Accounting for the additional input_current
+        is still done through the accumulator, but a learned_termination object is also created and
+        attached to keep track of the pre and post (self) spike times, and adjust the weight matrix according 
+        to the specified learning rule
+    
+        :param Ensemble pre: the pre-synaptic population
+        :param Ensemble error: the population that provides the error signal
+        :param list weight_matrix: the initial connection weights with which to start
+        """
+        # generate an initial weight matrix if none provided, random numbers between -.001 and .001
+        if weight_matrix is None: 
+            weight_matrix = self.srng.uniform(size=(self.neurons_num, pre.neurons_num), low=-.001, high=.001)
+        weight_matrix = numpy.array(weight_matrix) # make sure it's an np.array
+        encoded_output = TT.dot(pre.neurons.output, weight_matrix)
+        # add encoded output to the accumulator to handle the input_current from this connection during simulation
+        self.add_filtered_input(pstc=pstc, encoded_input=encoded_input)
+
+        self.learned_terminations.append[learned_terminations(pre, self, error, weight_matrix)]
         
     def add_origin(self, name, func, eval_points=None):
         """Create a new origin to perform a given function over the represented signal
