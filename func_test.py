@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 
-#TODO: this doesn't actually work, all output is the same
 net=nef.Network('Function Test')
 net.make_input('in', value=math.sin)
 net.make('A', neurons=500, dimensions=1)
