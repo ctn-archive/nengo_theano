@@ -1,9 +1,9 @@
 import inspect
-import math
+import numpy
 import theano
 from numbers import Number
 
-class SimpleNode(Node,Probeable):
+class SimpleNode():
     """A SimpleNode allows you to put arbitary code as part of a Nengo model.
         
     This object has Origins and Terminations which can be used just like
@@ -41,10 +41,11 @@ class SimpleNode(Node,Probeable):
         :param float pstc: the default time constant on the filtered inputs
         :param int dimensions: the number of dimensions of the decoded input signal
         """
+        self.t = 0 # current simulation time
         self.name = name
         self.origins = {}
         self.decoded_outputs = {}
-        self.dimensions = {} 
+        self.origin_dimensions = {} 
 
         self.init() # initialize internal variables if there are any
 
@@ -54,7 +55,7 @@ class SimpleNode(Node,Probeable):
             if name.startswith('origin_'):
                 self.origins[name[7:]] = method # store method reference
 
-                value = method(0.0) # initial output value = function value with input 0.0
+                value = method() # initial output value = function value with input 0.0
                 if isinstance(value, Number): value = [value] # if scalar, make it a list
                 self.decoded_outputs[name[7:]] = theano.shared(numpy.float32(value)) # theano internal state defining output value
 
@@ -78,11 +79,11 @@ class SimpleNode(Node,Probeable):
         """        
         pass
 
-    def reset(self):
+    def reset(self, **kwargs):
         """Reset the state of all the filtered inputs and internal variables"""
-        self.init()    
+        self.init(**kwargs)    
 
-    def run(self):
+    def theano_tick(self):
         """Run the simple node
 
         :param float start: The time to start running 
@@ -91,7 +92,7 @@ class SimpleNode(Node,Probeable):
         self.tick()    
 
         for origin in self.origins.keys():
-            value = self.origins[origin](self.t)
+            value = self.origins[origin]()
             # if value is a scalar output, make it a list
             if isinstance(value, Number): value = [value] 
             # cast as float32 for consistency / speed, but _after_ it's been made a list

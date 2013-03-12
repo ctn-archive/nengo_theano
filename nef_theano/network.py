@@ -129,16 +129,16 @@ class Network:
     
         if decoded_weight_matrix is None: # if we're doing a decoded connection
             # if pre is an Input object
-            if isinstance(pre, input.Input) 
-                assert func is None # if pre is an input Node, func must be None
+            if isinstance(pre, input.Input):
+                assert func is None # if pre is an Input object, func must be None
                 decoded_output = pre.decoded_output
-                dim_pre = pre.dimensions # if Input object, just grab the number of dimensions from it
-            #TODO: how to hook up the simple node to the theano business? 
-            '''# if pre is a SimpleNode, then origin_name must also be specified 
-            if isinstance(pre, simplenode.SimpleNode): 
-                assert origin_name is not None
-            ''' 
-                    
+                dim_pre = pre.dimensions # grab the number of dimensions from it
+
+            # if pre is a SimpleNode, then origin_name must also be specified 
+            elif isinstance(pre, simplenode.SimpleNode): 
+                if len(pre.origins) > 1: assert origin_name is not None # if there's more than one origin, make sure they specified a name
+                decoded_output = pre.decoded_outputs[origin_name]
+                dim_pre = pre.origin_dimensions[origin_name] # grab the number of dimensions from it
 
             else:  # this should only be used for ensembles (TODO: maybe reorganize this if statement to check if it is an ensemble?)          
                 if func is not None: 
@@ -226,7 +226,7 @@ class Network:
             # run the non-theano nodes
             for node in self.tick_nodes:    
                 node.t = t
-                node.tick()
+                node.theano_tick()
             # run the theano nodes
             self.theano_tick()    
            

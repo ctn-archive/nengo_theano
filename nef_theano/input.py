@@ -32,7 +32,7 @@ class Input:
         """
         self.zeroed = False
 
-    def tick(self):
+    def theano_tick(self):
         """Move function input forward in time
         """
         if self.zeroed: return
