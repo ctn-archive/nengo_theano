@@ -38,7 +38,7 @@ class Network:
 
     def compute_transform(self, dim_pre, dim_post, weight=1, index_pre=None, index_post=None):
         """Helper function used by :func:`nef.Network.connect()` to create the 
-        *dim_pre* by *dim_post* transform matrix. Values are either 0 or *weight*.  
+        *dim_post* by *dim_pre* transform matrix. Values are either 0 or *weight*.  
         *index_pre* and *index_post* are used to determine which values are 
         non-zero, and indicate which dimensions of the pre-synaptic ensemble 
         should be routed to which dimensions of the post-synaptic ensemble.
@@ -168,7 +168,8 @@ class Network:
             # get the instantaneous spike raster from the pre population
             neuron_output = pre.neurons.output 
             # the encoded input to the next population is the spikes x weight matrix
-            encoded_output = TT.dot(neuron_output, numpy.array(decoded_weight_matrix[0]))
+            # dot product is opposite order than for decoded_output because of neurons.output shape
+            encoded_output = TT.dot(neuron_output, numpy.array(decoded_weight_matrix))
             
             # pass in the pre population encoded output function to the post population, connecting them for theano
             post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
