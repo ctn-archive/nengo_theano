@@ -183,11 +183,18 @@ class Ensemble:
         input_current += TT.dot(X, self.encoders.T) # calculate input_current for each neuron as represented input signal x preferred direction
 
         # if noise has been specified for this neuron, add Gaussian white noise with variance self.noise to the input_current
-        if self.noise: # generate random noise values, one for each input_current element, with standard deviation = sqrt(self.noise=std**2)
+        if self.noise: 
+            # generate random noise values, one for each input_current element, 
+            # with standard deviation = sqrt(self.noise=std**2)
+            # When simulating white noise, the noise process must be scaled by
+            # sqrt(dt) instead of dt. Hence, we divide the std by sqrt(dt).
             if self.noise_type.lower() == 'gaussian':
-                input_current += self.srng.normal(size=input_current.shape, std=numpy.sqrt(self.noise))
+                input_current += self.srng.normal(size=input_current.shape, 
+                                                  std=numpy.sqrt(self.noise/self.dt))
             elif self.noise_type.lower() == 'uniform':
-                input_current += self.srng.uniform(size=input_current.shape, low=-self.noise, high=self.noise)
+                input_current += self.srng.uniform(size=input_current.shape, 
+                                                   low=-self.noise/numpy.sqrt(dt), 
+                                                   high=self.noise/numpy.sqrt(dt))
         
         # pass that total into the neuron model to produce the main theano computation
         updates = self.neurons.update(input_current) # updates is an ordered dictionary of theano internal variables to update
