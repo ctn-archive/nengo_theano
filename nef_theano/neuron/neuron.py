@@ -40,4 +40,8 @@ class Neuron:
         self.output = theano.shared(numpy.zeros(size).astype('float32')) # set up theano internal state variable
 
     def reset(self):
+        """Reset the state of the neuron"""
         self.output.set_value(numpy.zeros(self.size).astype('float32')) # reset internal state variable
+
+    def update(self, input_current): raise NotImplementedError()
+    """All neuron subclasses must have an update function that takes in input_current and returns activity information""" 

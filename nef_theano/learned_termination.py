@@ -20,7 +20,7 @@ class Learned_Termination():
         self.weight_matrix # the theano object that holds the connection weights (post.neurons_num x pre.neurons_num)
     
     def learn(self): raise NotImplementedError()
-        """The learning function, to be implemented by any specific learning subclasses"""
+    """The learning function, to be implemented by any specific learning subclasses"""
 
     def update(self):
         """The updates to the weight matrix calculation.

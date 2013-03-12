@@ -229,6 +229,10 @@ class Ensemble:
             if hasattr(a, 'new_encoded_input'): # if there's an encoded input in this accumulator,
                 updates[a.encoded_input] = a.new_encoded_input.astype('float32') # add accumulated encoded inputs to theano internal variable updates
 
+        for l in self.learned_terminations:
+            # also update the weight matrices on learned terminations
+            updates.update(l.update())
+
         # and compute the decoded origin decoded_input from the neuron output
         for o in self.origin.values():
             # in the dictionary updates, set each origin's output decoded_input equal to the self.neuron.output() we just calculated
