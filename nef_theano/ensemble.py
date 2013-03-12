@@ -73,7 +73,8 @@ class Accumulator:
         
 class Ensemble:
     def __init__(self, neurons, dimensions, tau_ref=0.002, tau_rc=0.02, max_rate=(200,300), intercept=(-1.0,1.0), 
-                                    radius=1.0, encoders=None, seed=None, neuron_type='lif', dt=0.001, array_size=1, eval_points=None):
+                                    radius=1.0, encoders=None, seed=None, neuron_type='lif', dt=0.001, array_size=1, 
+                                    eval_points=None, noise=None, noise_type='uniform'):
         """Create an population of neurons with NEF parameters on top
         
         :param int neurons: number of neurons in this population
@@ -89,6 +90,11 @@ class Ensemble:
         :param float dt: time step of neurons during update step
         :param int array_size: number of sub-populations - for network arrays
         :param list eval_points: specific set of points to optimize decoders over by default for this ensemble
+        :param float noise: noise parameter for this ensemble for noise added to input current, sampled at every timestep
+                            if noise_type = uniform, this is the lower and upper bound on the distribution
+                            if noise_type = gaussian, this is the variance
+        :param string noise_type: the type of noise added to the input current, options = {'uniform', 'gaussian'}
+                                  default is 'uniform' to match the Nengo implementation
         """
         self.seed = seed
         self.neurons_num = neurons
@@ -96,6 +102,10 @@ class Ensemble:
         self.array_size = array_size
         self.radius = radius
         self.eval_points = eval_points
+        self.noise = noise
+        self.noise_type = noise_type
+        if self.noise: # if a noise variance was specified
+            self.srng = RandomStreams(seed=self.seed) # setup theano random number generator to generate noise
         
         # create the neurons
         # TODO: handle different neuron types, which may have different parameters to pass in
@@ -171,6 +181,13 @@ class Ensemble:
         X = X.reshape((self.array_size, self.dimensions)) # reshape decoded input for network arrays
         # find input current caused by decoded input signals 
         input_current += TT.dot(X, self.encoders.T) # calculate input_current for each neuron as represented input signal x preferred direction
+
+        # if noise has been specified for this neuron, add Gaussian white noise with variance self.noise to the input_current
+        if self.noise: # generate random noise values, one for each input_current element, with standard deviation = sqrt(self.noise=std**2)
+            if self.noise_type.lower() == 'gaussian':
+                input_current += self.srng.normal(size=input_current.shape, std=numpy.sqrt(self.noise))
+            elif self.noise_type.lower() == 'uniform':
+                input_current += self.srng.uniform(size=input_current.shape, low=-self.noise, high=self.noise)
         
         # pass that total into the neuron model to produce the main theano computation
         updates = self.neurons.update(input_current) # updates is an ordered dictionary of theano internal variables to update
