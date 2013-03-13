@@ -38,32 +38,31 @@ net.nodes['A3'].add_origin('pow', func=pow, eval_points=eval_points) # for test 
 net.connect('in', 'A1')
 net.connect('in', 'A2')
 net.connect('in', 'A3')
-net.connect('A1', 'B', origin_name='pow') # for test 1
+net.connect('A1:pow', 'B') # for test 1
 net.connect('A2', 'C', func=pow) # for test 2
-net.connect('A3', 'D', origin_name='pow') # for test 3
+net.connect('A3:pow', 'D') # for test 3
 
 timesteps = 500
-# setup arrays to store data gathered from sim
-Fvals = np.zeros((timesteps,1))
-A1vals = np.zeros((timesteps,1))
-A2vals = np.zeros((timesteps,1))
-A3vals = np.zeros((timesteps,1))
+dt_step = 0.01
+t = np.linspace(dt_step, timesteps*dt_step, timesteps)
+pstc = 0.01
+
+Ip = net.make_probe(net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+A1p = net.make_probe(net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+A2p = net.make_probe(net.nodes['C'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+A3p = net.make_probe(net.nodes['D'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
-for i in range(timesteps):
-    net.run(0.01)
-    Fvals[i] = net.nodes['in'].decoded_output.get_value() 
-    A1vals[i] = net.nodes['A1'].origin['pow'].decoded_output.get_value() 
-    A2vals[i] = net.nodes['A2'].origin['pow'].decoded_output.get_value() 
-    A3vals[i] = net.nodes['A3'].origin['pow'].decoded_output.get_value() 
+net.run(timesteps*dt_step)
+
 
 # plot the results
 plt.ion(); plt.clf(); 
 plt.subplot(411); plt.title('Input')
-plt.plot(Fvals)
+plt.plot(Ip.get_data())
 plt.subplot(412); plt.title('A1')
-plt.plot(A1vals)
+plt.plot(A1p.get_data())
 plt.subplot(413); plt.title('A2')
-plt.plot(A2vals)
+plt.plot(A2p.get_data())
 plt.subplot(414); plt.title('A3')
-plt.plot(A3vals)
+plt.plot(A3p.get_data())

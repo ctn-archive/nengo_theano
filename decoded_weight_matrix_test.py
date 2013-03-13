@@ -11,7 +11,7 @@ import nef_theano as nef
 import numpy as np
 import matplotlib.pyplot as plt
 
-neurons = 300
+neurons = 100
 dimensions = 1
 array_size = 3
 inhib_scale = 10
@@ -36,31 +36,29 @@ net.connect('A', 'B2', decoded_weight_matrix=inhib_matrix)
 #net.connect('A', 'B3', decoded_weight_matrix=[-10]) 
 
 timesteps = 500
-In1vals = np.zeros((timesteps, dimensions))
-In2vals = np.zeros((timesteps, array_size))
-Avals = np.zeros((timesteps, dimensions))
-Bvals = np.zeros((timesteps, dimensions))
-B2vals = np.zeros((timesteps, dimensions * array_size))
-#B3vals = np.zeros((timesteps, dimensions * array_size))
-for i in range(timesteps):
-    net.run(0.01)
-    In1vals[i] = net.nodes['in1'].decoded_output.get_value() 
-    In2vals[i] = net.nodes['in2'].decoded_output.get_value() 
-    Avals[i] = net.nodes['A'].origin['X'].decoded_output.get_value() 
-    Bvals[i] = net.nodes['B'].origin['X'].decoded_output.get_value() 
-    B2vals[i] = net.nodes['B2'].origin['X'].decoded_output.get_value() 
-    #B3vals[i] = net.nodes['B3'].origin['X'].decoded_output.get_value() 
+dt_step = 0.01
+t = np.linspace(dt_step, timesteps*dt_step, timesteps)
+pstc = 0.01
+
+Ip = net.make_probe(net.nodes['in1'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+I2p = net.make_probe(net.nodes['in2'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+B2p = net.make_probe(net.nodes['B2'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+
+print "starting simulation"
+net.run(timesteps*dt_step)
 
 plt.ion(); plt.close(); 
 plt.subplot(611); plt.title('Input1')
-plt.plot(In1vals); 
+plt.plot(Ip.get_data()); 
 plt.subplot(612); plt.title('Input2')
-plt.plot(In2vals); 
+plt.plot(I2p.get_data()); 
 plt.subplot(613); plt.title('A = In1')
-plt.plot(Avals)
+plt.plot(Ap.get_data())
 plt.subplot(614); plt.title('B = In2(0) inhib by A')
-plt.plot(Bvals)
+plt.plot(Bp.get_data())
 plt.subplot(615); plt.title('B2 = In2, network array inhib by A')
-plt.plot(B2vals)
+plt.plot(B2p.get_data())
 #plt.subplot(616); plt.title('B3 = In2(0), inhib by scalar from A')
 #plt.plot(B3vals)

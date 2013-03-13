@@ -118,7 +118,7 @@ class Network:
         """
         # make sure contradicting things aren't simultaneously specified
         if decoded_weight_matrix is not None:
-            assert (transform is None) and (weight == 1) and (index_pre is None) and (index_post is None) and (func is None) and (origin_name is None)
+            assert (transform is None) and (weight == 1) and (index_pre is None) and (index_post is None) and (func is None)
         else: 
             assert not (transform is not None and ((weight != 1) or (index_pre is not None) or (index_post is not None)))
         
@@ -179,7 +179,7 @@ class Network:
 
         elif len(split) == 2: # origin specified
             node = self.nodes[split[0]]
-            return node.origins[split[1]]
+            return node.origin[split[1]]
        
     def learn(self, pre, post, error, pstc=0.01, weight_matrix=None):
         """Add a connection with learning between pre and post, modulated by error

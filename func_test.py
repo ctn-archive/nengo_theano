@@ -18,22 +18,20 @@ net.connect('in', 'A')
 net.connect('A', 'B', func=square, pstc=0.1)
 
 timesteps = 500
-# setup arrays to store data gathered from sim
-Fvals = np.zeros((timesteps, 1))
-Avals = np.zeros((timesteps, 1))
-Bvals = np.zeros((timesteps, 3))
+dt_step = 0.01
+t = np.linspace(dt_step, timesteps*dt_step, timesteps)
+pstc = 0.03
+
+Ip = net.make_probe(net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
-for i in range(timesteps):
-    net.run(0.01)
-    Fvals[i] = net.nodes['in'].decoded_output.get_value() 
-    Avals[i] = net.nodes['A'].origin['X'].decoded_output.get_value() 
-    Bvals[i] = net.nodes['B'].accumulators[0.1].decoded_input.get_value()
-    #Bvals[i] = net.nodes['B'].origin['X'].decoded_output.get_value() 
+net.run(timesteps*dt_step)
 
 # plot the results
 plt.ion(); plt.clf(); plt.hold(1);
-plt.plot(Fvals)
-plt.plot(Avals)
-plt.plot(Bvals)
+plt.plot(Ip.get_data())
+plt.plot(Ap.get_data())
+plt.plot(Bp.get_data())
 plt.legend(['Input','A','B0','B1','B2'])
