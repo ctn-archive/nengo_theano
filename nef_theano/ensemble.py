@@ -45,9 +45,12 @@ class Accumulator:
         self.decoded_input = theano.shared(numpy.zeros(self.ensemble.dimensions * self.ensemble.array_size).astype('float32')) # the initial filtered decoded input 
         # encoded_input, however, is the same for all networks in the arrays, connecting directly to the neurons, so only needs to be size neurons_num
         self.encoded_input = theano.shared(numpy.zeros(self.ensemble.neurons_num).astype('float32')) # the initial filtered encoded input 
+        # learn_input, is different for all networks in the arrays, connecting directly to the neurons, so it needs to be size neurons_num * array_size
+        self.learn_input = theano.shared(numpy.zeros(self.ensemble.neurons_num * self.ensemble.array_size).astype('float32')) # the initial filtered encoded input 
         self.decay = numpy.exp(-self.ensemble.neurons.dt / pstc) # time constant for filter
         self.decoded_total = None # the theano object representing the sum of the decoded inputs to this filter
         self.encoded_total = None # the theano object representing the sum of the encoded inputs to this filter
+        self.learn_total = None # the theano object representing the sum of the learned inputs to this filter
 
     def add_decoded_input(self, decoded_input):
         """Add to the current set of decoded inputs (with the same post-synaptic time constant pstc) an additional input
@@ -66,7 +69,7 @@ class Accumulator:
         self.new_encoded_input is the calculation of the contribution of all the encoded input with the same filtering 
         time constant to the ensemble, where the encoded_input is exactly the input current to each neuron in the ensemble
         
-        :param encoded_input: theano object representing the current output of every neuron of the pre population x a connection weight matrix
+        :param encoded_input: theano object representing the decoded output of every neuron of the pre population x a connection weight matrix
         """
         if self.encoded_total is None: self.encoded_total = encoded_input # initialize internal value storing encoded input (current) to neurons 
         else: self.encoded_total = self.encoded_total + encoded_input # add input encoded input (current) to neurons
@@ -74,6 +77,19 @@ class Accumulator:
         # flatten because a col + a vec gives a matrix type, but it's actually just a vector still
         self.new_encoded_input = TT.flatten(self.decay * self.encoded_input + (1 - self.decay) * self.encoded_total) # the theano object representing the filtering operation        
         
+    def add_learn_input(self, learn_input): 
+        """Add to the current set of learn input (with the same post-synaptic time constant pstc) an additional input
+        self.new_learn_input is the calculation of the contribution of all the learn input with the same filtering 
+        time constant to the ensemble, where the learn_input is exactly the input current to each neuron in the ensemble
+        
+        :param learn_input: theano object representing the current output of every neuron of the pre population x a connection weight matrix
+        """
+        if self.learn_total is None: self.learn_total = learn_input # initialize internal value storing learned encoded input (current) to neurons 
+        else: self.learn_total = self.learn_total + learn_input # add input learn input (current) to neurons
+
+        # flatten because a col + a vec gives a matrix type, but it's actually just a vector still
+        self.new_learn_input = TT.flatten(self.decay * self.learn_input + (1 - self.decay) * self.learn_total) # the theano object representing the filtering operation        
+
 class Ensemble:
     def __init__(self, neurons, dimensions, tau_ref=0.002, tau_rc=0.02, 
                  max_rate=(200,300), intercept=(-1.0,1.0), radius=1.0, 
@@ -133,33 +149,40 @@ class Ensemble:
         self.accumulators = {} # dictionary of accumulators tracking terminations with different pstc values
         self.learned_terminations = [] # list of learned terminations on ensemble
     
-    def add_filtered_input(self, pstc, decoded_input=None, encoded_input=None):
+    def add_filtered_input(self, pstc, decoded_input=None, encoded_input=None, learn_input=None):
         """Accounts for a new termination that takes the given input 
         (a theano object) and filters it with the given pstc.
 
-        Adds its contributions to the set of decoded or encoded input with the 
+        Adds its contributions to the set of decoded, encoded, or learn input with the 
         same pstc. Decoded inputs are represented signals, encoded inputs are
-        neuron activities * weight matrix. Can only have decoded OR encoded input != None.
+        decoded_output * weight matrix, learn input is activities * weight_matrix.
+        Can only have decoded OR encoded OR learn input != None.
 
         :param float pstc: post-synaptic time constant
         :param decoded_input: theano object representing the decoded output of 
             the pre population multiplied by this termination's transform matrix
         :param encoded_input: theano object representing the encoded output of 
             the pre population multiplied by a connection weight matrix
+        :param learn_input: theano object representing the learned output of 
+            the pre population multiplied by a connection weight matrix
         """
-        # make sure one and only one of (decoded_input, encoded_input) is specified
-        assert (decoded_input is None or encoded_input is None)
-        assert (decoded_input is not None or encoded_input is not None)
+        # make sure one and only one of (decoded_input, encoded_input, learn_input) is specified
+        if decoded_input: assert (encoded_input is None) and (learn_input is None)
+        elif encoded_input: assert (decoded_input is None) and (learn_input is None)
+        elif learn_input: assert (decoded_input is None) and (encoded_input is None)
+        assert (decoded_input) or (encoded_input) or (learn_input) 
 
         if pstc not in self.accumulators: # make sure there's an accumulator for given pstc
             self.accumulators[pstc] = Accumulator(self, pstc)
 
         # add this termination's contribution to the set of terminations with the same pstc
-        if decoded_input is not None: 
+        if decoded_input: 
             # rescale decoded_input by this neurons radius to put us in the right range
             self.accumulators[pstc].add_decoded_input(TT.true_div(decoded_input, self.radius)) 
-        else: 
+        elif encoded_input: 
             self.accumulators[pstc].add_encoded_input(encoded_input)
+        elif learn_input:
+            self.accumulators[pstc].add_learn_input(learn_input)
    
     #TODO: make this support specifying error origins 
     def add_learned_termination(self, pre, error, pstc, weight_matrix=None,
@@ -178,13 +201,14 @@ class Ensemble:
         # generate an initial weight matrix if none provided, random numbers between -.001 and .001
         if weight_matrix is None: 
             weight_matrix = numpy.random.uniform(
-                size=(self.neurons_num, pre.neurons_num), low=-.001, high=.001)
+                size=(self.neurons_num * self.array_size, pre.neurons_num * pre.array_size), low=-.001, high=.001)
         else:
             weight_matrix = numpy.array(weight_matrix) # make sure it's an np.array
+
         weight_matrix = theano.shared(weight_matrix.astype('float32'))
-        encoded_output = TT.dot(pre.neurons.output, weight_matrix)
-        # add encoded output to the accumulator to handle the input_current from this connection during simulation
-        self.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
+        learn_output = TT.dot(pre.neurons.output, weight_matrix.T)
+        # add learn output to the accumulator to handle the input_current from this connection during simulation
+        self.add_filtered_input(pstc=pstc, learn_input=learn_output)
 
         self.learned_terminations.append(
             learned_termination_class(pre, self, error, weight_matrix))
@@ -207,13 +231,16 @@ class Ensemble:
         # find the total input current to this population of neurons
         input_current = numpy.tile(self.bias, (self.array_size, 1)) # apply respective biases to neurons in the population 
         X = numpy.zeros(self.dimensions * self.array_size) # set up matrix to store accumulated decoded input, same size as decoded_input
-
+    
         for a in self.accumulators.values(): 
             if hasattr(a, 'new_decoded_input'): # if there's a decoded input in this accumulator,
                 X += a.new_decoded_input # add its values to the total decoded input
             if hasattr(a, 'new_encoded_input'): # if there's an encoded input in this accumulator
                 # encoded input is the same to every array network
                 input_current += a.new_encoded_input # add its values directly to the input current 
+            if hasattr(a, 'new_learn_input'): # if there's a learn input in this accumulator
+                # learn input is self.neurons_num x self.array_size, need to reshape
+                input_current += a.new_learn_input.reshape((self.array_size, self.neurons_num))
 
         #TODO: optimize for when nothing is added to X (ie there are no decoded inputs)
         X = X.reshape((self.array_size, self.dimensions)) # reshape decoded input for network arrays
@@ -243,6 +270,8 @@ class Ensemble:
                 updates[a.decoded_input] = a.new_decoded_input.astype('float32') # add accumulated decoded inputs to theano internal variable updates
             if hasattr(a, 'new_encoded_input'): # if there's an encoded input in this accumulator,
                 updates[a.encoded_input] = a.new_encoded_input.astype('float32') # add accumulated encoded inputs to theano internal variable updates
+            if hasattr(a, 'new_learn_input'): # if there's a learn input in this accumulator,
+                updates[a.learn_input] = a.new_learn_input.astype('float32') # add accumulated learn inputs to theano internal variable updates
 
         for l in self.learned_terminations:
             # also update the weight matrices on learned terminations

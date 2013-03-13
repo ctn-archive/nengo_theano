@@ -205,7 +205,6 @@ class Network:
         e = ensemble.Ensemble(*args, **kwargs) 
 
         self.nodes[name] = e # store created ensemble in node dictionary
-        return e
 
     def make_array(self, name, neurons, array_size, dimensions=1, **kwargs): 
         """Generate a network array specifically, for legacy code \ non-theano API compatibility
@@ -223,7 +222,6 @@ class Network:
         :param target: a Theano shared variable to record
         :param name: the name of the probe
         :param dt_sample: the sampling frequency of the probe
-        :param tau: the filter time constant of the probe
         :returns The Probe object
         """
         i = 0
@@ -247,7 +245,7 @@ class Network:
 
         theano.config.compute_test_value = 'warn' # for debugging
         return theano.function([], [], updates=updates) # create graph and return optimized update function
-       
+
     def run(self, time):
         """Run the simulation. If called twice, the simulation will continue for *time* more seconds.  
         Note that the ensembles are simulated at the dt timestep specified when they are created.

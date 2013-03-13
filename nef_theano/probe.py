@@ -8,22 +8,22 @@ class Probe(object):
     """A class to record from things (i.e., origins)"""
     buffer_size = 1000
 
-    def __init__(self, name, network, target, dt_sample, tau=0.03):
+    def __init__(self, name, network, target, dt_sample, pstc=0.03):
         self.name = name
         self.target = target
         self.i = -1
         self.t = 0
         self.dt = network.dt
         self.dt_sample = dt_sample
-        self.tau = tau
+        self.pstc = pstc
 
         target_value = np.zeros_like(target.get_value())
         self.data = np.zeros((self.buffer_size,) + target_value.shape)
-        self.filtered_data = theano.shared(target_value) if self.tau > 0 else None
+        self.filtered_data = theano.shared(target_value) if self.pstc > 0 else None
 
     def update(self):
         if self.filtered_data is not None:
-            alpha = TT.cast(self.dt/self.tau, dtype='float32')
+            alpha = TT.cast(self.dt/self.pstc , dtype='float32')
             filtered_value = self.filtered_data + alpha*(self.target - self.filtered_data)
             return collections.OrderedDict({self.filtered_data: filtered_value})
         else:
