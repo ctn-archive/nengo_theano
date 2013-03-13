@@ -41,9 +41,9 @@ net.make('A', neurons=300, dimensions=1)
 net.make('B', neurons=300, dimensions=1)
 net.make('C', neurons=300, dimensions=3)
 
-net.connect('SNinput', 'A', origin_name='test1')
-net.connect('SNinput', 'B', origin_name='test2')
-net.connect('SNinput', 'C', origin_name='test3')
+net.connect('SNinput:test1', 'A')
+net.connect('SNinput:test2', 'B')
+net.connect('SNinput:test3', 'C')
 
 timesteps = 500
 # setup arrays to store data gathered from sim
