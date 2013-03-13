@@ -69,6 +69,7 @@ class Network:
             transform[post][pre] = weight
         return transform
         
+    #TODO: encoded_weight - for and encoded weight matrix that is (pre.neurons_num x post.neurons_num)
     def connect(self, pre, post, pstc=0.01, transform=None, weight=1, index_pre=None, index_post=None, 
                         func=None, decoded_weight_matrix=None):
         """Connect two nodes in the network.
@@ -122,6 +123,7 @@ class Network:
         else: 
             assert not (transform is not None and ((weight != 1) or (index_pre is not None) or (index_post is not None)))
         
+
         self.theano_tick = None  # reset timer in case the model has been run previously, as adding a new node means we have to rebuild the theano function
         
         pre = self.get_object(pre) # get pre Node object from node dictionary
@@ -130,8 +132,15 @@ class Network:
         if decoded_weight_matrix is None: # if we're doing a decoded connection
             if isinstance(pre, origin.Origin): # see if we have an origin or not
                 decoded_output = pre.decoded_output
-                dim_pre = pre.dimensions
-            else:
+                dim_pre = pre.dimensions # grab the number of dimensions from it
+
+            # if pre is a SimpleNode, then origin_name must also be specified 
+            elif isinstance(pre, simplenode.SimpleNode): 
+                if len(pre.origin) > 1: assert origin_name is not None # if there's more than one origin, make sure they specified a name
+                decoded_output = pre.origin[origin_name].decoded_output
+                dim_pre = pre.origin[origin_name].dimensions # grab the number of dimensions from it
+
+            else:  # this should only be used for ensembles (TODO: maybe reorganize this if statement to check if it is an ensemble?)          
                 if func is not None: 
                     origin_name = func.__name__ # if no name provided, take name of function being calculated
                     #TODO: better analysis to see if we need to build a new origin (rather than just relying on the name)
@@ -179,7 +188,10 @@ class Network:
 
         elif len(split) == 2: # origin specified
             node = self.nodes[split[0]]
-            return node.origins[split[1]]
+            if isinstance(node, ensemble.Ensemble): # if it's an ensemble
+                return node.origins[split[1]]
+            if isinstance(node, simplenode.SimpleNode): # if it's a simplenode
+                return node.'''
        
     def learn(self, pre, post, error, pstc=0.01, weight_matrix=None):
         """Add a connection with learning between pre and post, modulated by error
@@ -192,7 +204,7 @@ class Network:
         pre = self.get_object(pre)
         post = self.get_object(post)
         error = self.get_object(error)
-        post.add_learned_termination(pre, error, pstc, weight_matrix)
+        return post.add_learned_termination(pre, error, pstc, weight_matrix)
 
     def make(self, name, *args, **kwargs): 
         """Create and return an ensemble of neurons. Note that all ensembles are actually arrays of length 1        

@@ -7,7 +7,7 @@ import numpy.random
 
 import neuron
 import ensemble_origin
-from learned_termination import Null_Learned_Termination
+from learned_termination import hPESTermination
 
 def make_encoders(neurons, dimensions, srng, encoders=None):
     """Generates a set of encoders
@@ -186,7 +186,7 @@ class Ensemble:
    
     #TODO: make this support specifying error origins 
     def add_learned_termination(self, pre, error, pstc, weight_matrix=None,
-                                learned_termination_class=Null_Learned_Termination):
+                                learned_termination_class=hPESTermination):
         """Adds a learned termination to the ensemble.
 
         Accounting for the additional input_current is still done through the 
@@ -201,17 +201,18 @@ class Ensemble:
         # generate an initial weight matrix if none provided, random numbers between -.001 and .001
         if weight_matrix is None: 
             weight_matrix = numpy.random.uniform(
-                size=(self.neurons_num * self.array_size, pre.neurons_num * pre.array_size), low=-.001, high=.001)
+                size=(self.neurons_num * self.array_size, pre.neurons_num * pre.array_size), 
+                low=-.001, high=.001)
         else:
             weight_matrix = numpy.array(weight_matrix) # make sure it's an np.array
 
-        weight_matrix = theano.shared(weight_matrix.astype('float32'))
-        learn_output = TT.dot(pre.neurons.output, weight_matrix.T)
+        learned_term = learned_termination_class(pre, self, error, weight_matrix)
+        learn_output = TT.dot(pre.neurons.output, learned_term.weight_matrix.T)
+
         # add learn output to the accumulator to handle the input_current from this connection during simulation
         self.add_filtered_input(pstc=pstc, learn_input=learn_output)
-
-        self.learned_terminations.append(
-            learned_termination_class(pre, self, error, weight_matrix))
+        self.learned_terminations.append(learned_term)
+        return learned_term
         
     def add_origin(self, name, func, eval_points=None):
         """Create a new origin to perform a given function over the represented signal
