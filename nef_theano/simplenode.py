@@ -3,6 +3,21 @@ import numpy
 import theano
 from numbers import Number
 
+class SimpleOrigin():
+    """A SimpleOrigin is a shell of an origin for SimpleNodes that provides 
+    an interface to SimpleNode origins that is the same as ensemble origins
+    """
+    def __init__(self, name, func, decoded_output, dimensions):
+        """
+        
+        :param string name: the name of this origin
+        :param function func: the function carried out by this origin
+        """
+        self.name = name
+        self.func = func
+        self.decoded_output = decoded_output
+        self.dimensions = dimensions
+
 class SimpleNode():
     """A SimpleNode allows you to put arbitary code as part of a Nengo model.
         
@@ -43,9 +58,7 @@ class SimpleNode():
         """
         self.t = 0 # current simulation time
         self.name = name
-        self.origins = {}
-        self.decoded_outputs = {}
-        self.origin_dimensions = {} 
+        self.origin = {}
 
         self.init() # initialize internal variables if there are any
 
@@ -53,14 +66,14 @@ class SimpleNode():
         # origins that implement the defined function
         for name, method in inspect.getmembers(self, inspect.ismethod):
             if name.startswith('origin_'):
-                self.origins[name[7:]] = method # store method reference
 
                 value = method() # initial output value = function value with input 0.0
                 if isinstance(value, Number): value = [value] # if scalar, make it a list
-                self.decoded_outputs[name[7:]] = theano.shared(numpy.float32(value)) # theano internal state defining output value
-
+                decoded_output = theano.shared(numpy.float32(value)) # theano internal state defining output value
                 # find number of parameters of the projected value
-                self.origin_dimensions[name[7:]] = len(value)
+                dimensions = len(value)
+                # add to dictionary of origins
+                self.origin[name[7:]] = SimpleOrigin(name[7:], method, decoded_output, dimensions)
 
     def tick(self):
         """An extra utility function that is called every time step.
@@ -91,9 +104,9 @@ class SimpleNode():
         """
         self.tick()    
 
-        for origin in self.origins.keys():
-            value = self.origins[origin]()
+        for origin in self.origin.values():
+            value = origin.func()
             # if value is a scalar output, make it a list
             if isinstance(value, Number): value = [value] 
             # cast as float32 for consistency / speed, but _after_ it's been made a list
-            self.decoded_outputs[origin].set_value(numpy.float32(value)) 
+            origin.decoded_output.set_value(numpy.float32(value)) 

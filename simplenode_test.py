@@ -57,9 +57,9 @@ Cvals = np.zeros((timesteps, 3))
 print "starting simulation"
 for i in range(timesteps):
     net.run(0.01)
-    In1vals[i] = net.nodes['SNinput'].decoded_outputs['test1'].get_value() 
-    In2vals[i] = net.nodes['SNinput'].decoded_outputs['test2'].get_value() 
-    In3vals[i] = net.nodes['SNinput'].decoded_outputs['test3'].get_value() 
+    In1vals[i] = net.nodes['SNinput'].origin['test1'].decoded_output.get_value() 
+    In2vals[i] = net.nodes['SNinput'].origin['test2'].decoded_output.get_value() 
+    In3vals[i] = net.nodes['SNinput'].origin['test3'].decoded_output.get_value() 
     Avals[i] = net.nodes['A'].origin['X'].decoded_output.get_value() 
     Bvals[i] = net.nodes['B'].origin['X'].decoded_output.get_value()
     Cvals[i] = net.nodes['C'].origin['X'].decoded_output.get_value()

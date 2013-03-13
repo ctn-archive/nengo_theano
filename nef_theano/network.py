@@ -139,9 +139,9 @@ class Network:
 
             # if pre is a SimpleNode, then origin_name must also be specified 
             elif isinstance(pre, simplenode.SimpleNode): 
-                if len(pre.origins) > 1: assert origin_name is not None # if there's more than one origin, make sure they specified a name
-                decoded_output = pre.decoded_outputs[origin_name]
-                dim_pre = pre.origin_dimensions[origin_name] # grab the number of dimensions from it
+                if len(pre.origin) > 1: assert origin_name is not None # if there's more than one origin, make sure they specified a name
+                decoded_output = pre.origin[origin_name].decoded_output
+                dim_pre = pre.origin[origin_name].dimensions # grab the number of dimensions from it
 
             else:  # this should only be used for ensembles (TODO: maybe reorganize this if statement to check if it is an ensemble?)          
                 if func is not None: 
@@ -177,6 +177,25 @@ class Network:
             # pass in the pre population encoded output function to the post population, connecting them for theano
             post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
 
+    '''def get_object(self, name):
+        """This is a method for parsing input to return the proper object
+        The only thing we need to check for here is a :, indicating an origin.
+
+        :param string name: the name of the desired object
+        """
+        assert isinstance(name, str)
+        split = name.split(':') # separate into node and origin, if specified
+
+        if len(split) == 1: # no origin specified
+            return self.nodes[name]
+
+        elif len(split) == 2: # origin specified
+            node = self.nodes[split[0]]
+            if isinstance(node, ensemble.Ensemble): # if it's an ensemble
+                return node.origins[split[1]]
+            if isinstance(node, simplenode.SimpleNode): # if it's a simplenode
+                return node.'''
+       
     def learn(self, pre, post, error, pstc=0.01, weight_matrix=None):
         """Add a connection with learning between pre and post, modulated by error
 
