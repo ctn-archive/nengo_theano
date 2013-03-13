@@ -221,7 +221,7 @@ class Ensemble:
         :param list eval_points: specific set of points to optimize decoders over for this origin
         """
         if eval_points == None: eval_points = self.eval_points
-        self.origin[name] = ensembl_origin.EnsembleOrigin(self, func, eval_points=eval_points)    
+        self.origin[name] = ensemble_origin.EnsembleOrigin(self, func, eval_points=eval_points)    
 
     def update(self):
         """Compute the set of theano updates needed for this ensemble

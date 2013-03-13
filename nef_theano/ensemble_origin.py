@@ -5,8 +5,9 @@ import numpy
 import neuron
 import collections
 import numpy as np
+import origin
 
-class EnsembleOrigin(Origin):
+class EnsembleOrigin(origin.Origin):
     def __init__(self, ensemble, func=None, eval_points=None):
         """The output to a population of neurons (ensemble), performing a transformation (func) on the represented value
 
@@ -14,11 +15,11 @@ class EnsembleOrigin(Origin):
         :param function func: the transformation to perform to the ensemble's represented values to get the output value
         """
         self.ensemble = ensemble
-        self.decoder = self.compute_decoder(eval_points)
+        self.decoder = self.compute_decoder(func, eval_points)
         initial_value = numpy.zeros(self.decoder.shape[1]*self.ensemble.array_size)
         super(EnsembleOrigin, self).__init__(func=func, initial_value=initial_value)
     
-    def compute_decoder(self, eval_points=None):     
+    def compute_decoder(self, func, eval_points=None):     
         """Calculate the scaling values to apply to the output to each of the neurons in the attached 
         population such that the weighted summation of their output generates the desired decoded output.
         Decoder values computed as D = (A'A)^-1 A'X_f where A is the matrix of activity values of each 
@@ -30,19 +31,19 @@ class EnsembleOrigin(Origin):
             # generate sample points from state space randomly to minimize decoder error over in decoder calculation
             #TODO: have num_samples be more for higher dimensions?  5000 maximum (like Nengo)?
             self.num_samples=500
-            eval_points = make_samples() 
+            eval_points = self.make_samples() 
         else: # otherwise reset num_samples, andhow  make sure eval_points is in the right form (rows are input dimensions, columns different samples)
             eval_points = np.array(eval_points)
             if len(eval_points.shape) == 1: eval_points.shape = [1, eval_points.shape[0]]
             self.num_samples = eval_points.shape[1]
 
         # compute the target_values at the sampled points (which are the same as the sample points for the 'X' origin)      ?????????? what does this ( ) part mean?
-        if self.func is None: # if no function provided, use identity function as default
+        if func is None: # if no function provided, use identity function as default
             target_values = eval_points 
         else: # otherwise calculate target_values using provided function
             # scale all our sample points by ensemble radius, calculate function value, then scale back to unit length
             # this ensures that we accurately capture the shape of the function when the radius is > 1 (think for example func=x**2)
-            target_values = numpy.array([self.func(s * self.ensemble.radius) for s in eval_points.T]) / self.ensemble.radius 
+            target_values = numpy.array([func(s * self.ensemble.radius) for s in eval_points.T]) / self.ensemble.radius 
             if len(target_values.shape) < 2: target_values.shape = target_values.shape[0], 1
             target_values = target_values.T
         
@@ -52,7 +53,7 @@ class EnsembleOrigin(Origin):
         
         # duplicate attached population of neurons into array of ensembles, one ensemble per sample point
         # so in parallel we can calculate the activity of all of the neurons at each sample point 
-        neurons = self.ensemble.neurons.__class__((self.ensemble.neurons_num, num_samples), tau_rc=self.ensemble.neurons.tau_rc, tau_ref=self.ensemble.neurons.tau_ref)
+        neurons = self.ensemble.neurons.__class__((self.ensemble.neurons_num, self.num_samples), tau_rc=self.ensemble.neurons.tau_rc, tau_ref=self.ensemble.neurons.tau_ref)
         
         # run the neuron model for 1 second, accumulating spikes to get a spike rate
         #  TODO: is this long enough?  Should it be less?  If we do less, we may get a good noise approximation!
@@ -91,7 +92,7 @@ class EnsembleOrigin(Origin):
         samples = samples / TT.sqrt(norm)
 
         # generate magnitudes for vectors from uniform distribution
-        scale = srng.uniform([num_samples])**(1.0 / dimensions)
+        scale = srng.uniform([self.num_samples])**(1.0 / self.ensemble.dimensions)
         samples = samples.T * scale # scale sample points
         
         return theano.function([],samples)()

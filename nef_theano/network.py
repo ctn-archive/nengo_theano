@@ -2,6 +2,7 @@ import ensemble
 import input
 import simplenode
 import probe
+import origin
 
 from theano import tensor as TT
 import theano
@@ -68,7 +69,6 @@ class Network:
             transform[post][pre] = weight
         return transform
         
-    #TODO: encoded_weight - for and encoded weight matrix that is (pre.neurons_num x post.neurons_num)
     def connect(self, pre, post, pstc=0.01, transform=None, weight=1, index_pre=None, index_post=None, 
                         func=None, decoded_weight_matrix=None):
         """Connect two nodes in the network.
@@ -128,7 +128,7 @@ class Network:
         post = self.get_object(post) # get post Node object from node dictionary
     
         if decoded_weight_matrix is None: # if we're doing a decoded connection
-            if isinstance(pre, Origin): # see if we have an origin or not
+            if isinstance(pre, origin.Origin): # see if we have an origin or not
                 decoded_output = pre.decoded_output
                 dim_pre = pre.dimensions
             else:

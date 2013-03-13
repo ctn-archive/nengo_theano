@@ -36,10 +36,10 @@ class Input:
         if self.zeroed: return
 
         if self.zero_after is not None and self.t > self.zero_after: # zero output
-            self.origin['X'].decoded_output.set_value(numpy.zeros(self.origin['X'].dimensions))
+            self.origin['X'].decoded_output.set_value(numpy.float32(numpy.zeros(self.origin['X'].dimensions)))
             self.zeroed=True
 
-        if self.function is not None: # update output decoded_output
+        if self.origin['X'].func is not None: # update output decoded_output
             value = self.origin['X'].func(self.t)
             # if value is a scalar output, make it a list
             if isinstance(value, Number): value = [value] 
