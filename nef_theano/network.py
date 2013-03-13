@@ -1,6 +1,7 @@
 import ensemble
 import input
 import simplenode
+import probe
 
 from theano import tensor as TT
 import theano
@@ -215,6 +216,24 @@ class Network:
         """ # Create an input and add it to the network
         """
         self.add(input.Input(*args, **kwargs))
+
+    def make_probe(self, target, name=None, dt_sample=0.01, **kwargs):
+        """Add a probe to measure the given target.
+        
+        :param target: a Theano shared variable to record
+        :param name: the name of the probe
+        :param dt_sample: the sampling frequency of the probe
+        :param tau: the filter time constant of the probe
+        :returns The Probe object
+        """
+        i = 0
+        while name is None or self.nodes.has_key(name):
+            i += 1
+            name = ("Probe%d" % i)
+
+        p = probe.Probe(name, self, target, dt_sample, **kwargs)
+        self.add(p)
+        return p
             
     def make_theano_tick(self):
         """Generate the theano function for running the network simulation
