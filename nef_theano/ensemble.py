@@ -1,11 +1,13 @@
+
 from theano.tensor.shared_randomstreams import RandomStreams
 from theano import tensor as TT
 import theano
 import numpy
+import numpy.random
 
 import neuron
 import origin
-import learned_termination
+from learned_termination import Null_Learned_Termination
 
 def make_encoders(neurons, dimensions, srng, encoders=None):
     """Generates a set of encoders
@@ -73,9 +75,10 @@ class Accumulator:
         self.new_encoded_input = TT.flatten(self.decay * self.encoded_input + (1 - self.decay) * self.encoded_total) # the theano object representing the filtering operation        
         
 class Ensemble:
-    def __init__(self, neurons, dimensions, tau_ref=0.002, tau_rc=0.02, max_rate=(200,300), intercept=(-1.0,1.0), 
-                                    radius=1.0, encoders=None, seed=None, neuron_type='lif', dt=0.001, array_size=1, 
-                                    eval_points=None, noise=None, noise_type='uniform'):
+    def __init__(self, neurons, dimensions, tau_ref=0.002, tau_rc=0.02, 
+                 max_rate=(200,300), intercept=(-1.0,1.0), radius=1.0, 
+                 encoders=None, seed=None, neuron_type='lif', dt=0.001, 
+                 array_size=1, eval_points=None, noise=None, noise_type='uniform'):
         """Create an population of neurons with NEF parameters on top
         
         :param int neurons: number of neurons in this population
@@ -110,7 +113,8 @@ class Ensemble:
         
         # create the neurons
         # TODO: handle different neuron types, which may have different parameters to pass in
-        self.neurons = neuron.names[neuron_type]((array_size, self.neurons_num), tau_rc=tau_rc, tau_ref=tau_ref, dt=dt)
+        self.neurons = neuron.names[neuron_type]((array_size, self.neurons_num), 
+                                                 tau_rc=tau_rc, tau_ref=tau_ref, dt=dt)
         
         # compute alpha and bias
         srng = RandomStreams(seed=seed) # set up theano random number generator
@@ -130,14 +134,18 @@ class Ensemble:
         self.learned_terminations = [] # list of learned terminations on ensemble
     
     def add_filtered_input(self, pstc, decoded_input=None, encoded_input=None):
-        """Create a new termination that takes the given input (a theano object) and filters it with the given pstc
-        Adds its contributions to the set of decoded or encoded input with the same pstc
-        Decoded inputs are represented signals, encoded inputs are neuron activities * weight matrix
-        Can only have decoded OR encoded input != None
+        """Accounts for a new termination that takes the given input 
+        (a theano object) and filters it with the given pstc.
+
+        Adds its contributions to the set of decoded or encoded input with the 
+        same pstc. Decoded inputs are represented signals, encoded inputs are
+        neuron activities * weight matrix. Can only have decoded OR encoded input != None.
 
         :param float pstc: post-synaptic time constant
-        :param decoded_input: theano object representing the decoded output of the pre population multiplied by this termination's transform matrix
-        :param encoded_input: theano object representing the encoded output of the pre population multiplied by a connection weight matrix
+        :param decoded_input: theano object representing the decoded output of 
+            the pre population multiplied by this termination's transform matrix
+        :param encoded_input: theano object representing the encoded output of 
+            the pre population multiplied by a connection weight matrix
         """
         # make sure one and only one of (decoded_input, encoded_input) is specified
         assert (decoded_input is None or encoded_input is None)
@@ -154,11 +162,14 @@ class Ensemble:
             self.accumulators[pstc].add_encoded_input(encoded_input)
    
     #TODO: make this support specifying error origins 
-    def add_learned_termination(self, pre, error, pstc, weight_matrix=None):
-        """Adds a learned termination to the ensemble. Accounting for the additional input_current
-        is still done through the accumulator, but a learned_termination object is also created and
-        attached to keep track of the pre and post (self) spike times, and adjust the weight matrix according 
-        to the specified learning rule
+    def add_learned_termination(self, pre, error, pstc, weight_matrix=None,
+                                learned_termination_class=Null_Learned_Termination):
+        """Adds a learned termination to the ensemble.
+
+        Accounting for the additional input_current is still done through the 
+        accumulator, but a learned_termination object is also created and
+        attached to keep track of the pre and post (self) spike times, and 
+        adjust the weight matrix according to the specified learning rule.
     
         :param Ensemble pre: the pre-synaptic population
         :param Ensemble error: the population that provides the error signal
@@ -166,13 +177,17 @@ class Ensemble:
         """
         # generate an initial weight matrix if none provided, random numbers between -.001 and .001
         if weight_matrix is None: 
-            weight_matrix = self.srng.uniform(size=(self.neurons_num, pre.neurons_num), low=-.001, high=.001)
-        weight_matrix = numpy.array(weight_matrix) # make sure it's an np.array
+            weight_matrix = numpy.random.uniform(
+                size=(self.neurons_num, pre.neurons_num), low=-.001, high=.001)
+        else:
+            weight_matrix = numpy.array(weight_matrix) # make sure it's an np.array
+        weight_matrix = theano.shared(weight_matrix.astype('float32'))
         encoded_output = TT.dot(pre.neurons.output, weight_matrix)
         # add encoded output to the accumulator to handle the input_current from this connection during simulation
-        self.add_filtered_input(pstc=pstc, encoded_input=encoded_input)
+        self.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
 
-        self.learned_terminations.append[learned_terminations(pre, self, error, weight_matrix)]
+        self.learned_terminations.append(
+            learned_termination_class(pre, self, error, weight_matrix))
         
     def add_origin(self, name, func, eval_points=None):
         """Create a new origin to perform a given function over the represented signal

@@ -27,9 +27,9 @@ class Network:
         if seed is not None:
             self.random.seed(seed)
           
-    #TODO: used for Input now, should be used for SimpleNodes when those get implemented 
     def add(self, node):
-        """Add an arbitrary non-theano node to the network 
+        """Add an arbitrary non-theano node to the network.
+        Specifically used for inputs and SimpleNodes.
         
         :param Node node: 
         """
@@ -123,9 +123,11 @@ class Network:
         
 
         self.theano_tick = None  # reset timer in case the model has been run previously, as adding a new node means we have to rebuild the theano function
-                        
-        pre = self.nodes[pre] # get pre Node object from node dictionary
-        post = self.nodes[post] # get post Node object from node dictionary
+        
+        if isinstance(pre, str):
+            pre = self.nodes[pre] # get pre Node object from node dictionary
+        if isinstance(post, str):
+            post = self.nodes[post] # get post Node object from node dictionary
     
         if decoded_weight_matrix is None: # if we're doing a decoded connection
             # if pre is an Input object
@@ -182,6 +184,9 @@ class Network:
         :param Ensemble error: the population that provides the error signal
         :param list weight_matrix: the initial connection weights with which to start
         """
+        if isinstance(pre, str): pre = self.nodes[pre]
+        if isinstance(post, str): post = self.nodes[post]
+        if isinstance(error, str): error = self.nodes[error]
         post.add_learned_termination(pre, error, pstc, weight_matrix)
 
     def make(self, name, *args, **kwargs): 
@@ -199,6 +204,7 @@ class Network:
         e = ensemble.Ensemble(*args, **kwargs) 
 
         self.nodes[name] = e # store created ensemble in node dictionary
+        return e
 
     def make_array(self, name, neurons, array_size, dimensions=1, **kwargs): 
         """Generate a network array specifically, for legacy code \ non-theano API compatibility
