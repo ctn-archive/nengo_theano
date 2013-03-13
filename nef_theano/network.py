@@ -70,7 +70,7 @@ class Network:
         
     #TODO: encoded_weight - for and encoded weight matrix that is (pre.neurons_num x post.neurons_num)
     def connect(self, pre, post, pstc=0.01, transform=None, weight=1, index_pre=None, index_post=None, 
-                        func=None, origin_name=None, decoded_weight_matrix=None):
+                        func=None, decoded_weight_matrix=None):
         """Connect two nodes in the network.
         Note: cannot specify (transform) AND any of (weight, index_pre, index_post) 
               cannot specify (weight_matrix) AND any of (transform, weight, index_pre, index_post, func, origin_name)
@@ -122,30 +122,18 @@ class Network:
         else: 
             assert not (transform is not None and ((weight != 1) or (index_pre is not None) or (index_post is not None)))
         
-
         self.theano_tick = None  # reset timer in case the model has been run previously, as adding a new node means we have to rebuild the theano function
         
-        if isinstance(pre, str):
-            pre = self.nodes[pre] # get pre Node object from node dictionary
-        if isinstance(post, str):
-            post = self.nodes[post] # get post Node object from node dictionary
+        pre = self.get_object(pre) # get pre Node object from node dictionary
+        post = self.get_object(post) # get post Node object from node dictionary
     
         if decoded_weight_matrix is None: # if we're doing a decoded connection
-            # if pre is an Input object
-            if isinstance(pre, input.Input):
-                assert func is None # if pre is an Input object, func must be None
+            if isinstance(pre, Origin): # see if we have an origin or not
                 decoded_output = pre.decoded_output
-                dim_pre = pre.dimensions # grab the number of dimensions from it
-
-            # if pre is a SimpleNode, then origin_name must also be specified 
-            elif isinstance(pre, simplenode.SimpleNode): 
-                if len(pre.origin) > 1: assert origin_name is not None # if there's more than one origin, make sure they specified a name
-                decoded_output = pre.origin[origin_name].decoded_output
-                dim_pre = pre.origin[origin_name].dimensions # grab the number of dimensions from it
-
-            else:  # this should only be used for ensembles (TODO: maybe reorganize this if statement to check if it is an ensemble?)          
+                dim_pre = pre.dimensions
+            else:
                 if func is not None: 
-                    if origin_name is None: origin_name = func.__name__ # if no name provided, take name of function being calculated
+                    origin_name = func.__name__ # if no name provided, take name of function being calculated
                     #TODO: better analysis to see if we need to build a new origin (rather than just relying on the name)
                     if origin_name not in pre.origin: # if an origin for this function hasn't already been created
                         pre.add_origin(origin_name, func) # create origin with to perform desired func
@@ -177,7 +165,7 @@ class Network:
             # pass in the pre population encoded output function to the post population, connecting them for theano
             post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
 
-    '''def get_object(self, name):
+    def get_object(self, name):
         """This is a method for parsing input to return the proper object
         The only thing we need to check for here is a :, indicating an origin.
 
@@ -191,10 +179,7 @@ class Network:
 
         elif len(split) == 2: # origin specified
             node = self.nodes[split[0]]
-            if isinstance(node, ensemble.Ensemble): # if it's an ensemble
-                return node.origins[split[1]]
-            if isinstance(node, simplenode.SimpleNode): # if it's a simplenode
-                return node.'''
+            return node.origins[split[1]]
        
     def learn(self, pre, post, error, pstc=0.01, weight_matrix=None):
         """Add a connection with learning between pre and post, modulated by error
@@ -204,9 +189,9 @@ class Network:
         :param Ensemble error: the population that provides the error signal
         :param list weight_matrix: the initial connection weights with which to start
         """
-        if isinstance(pre, str): pre = self.nodes[pre]
-        if isinstance(post, str): post = self.nodes[post]
-        if isinstance(error, str): error = self.nodes[error]
+        pre = self.get_object(pre)
+        post = self.get_object(post)
+        error = self.get_object(error)
         post.add_learned_termination(pre, error, pstc, weight_matrix)
 
     def make(self, name, *args, **kwargs): 
