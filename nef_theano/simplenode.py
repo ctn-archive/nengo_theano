@@ -3,21 +3,6 @@ import numpy
 import theano
 from numbers import Number
 
-class SimpleOrigin():
-    """A SimpleOrigin is a shell of an origin for SimpleNodes that provides 
-    an interface to SimpleNode origins that is the same as ensemble origins
-    """
-    def __init__(self, name, func, decoded_output, dimensions):
-        """
-        
-        :param string name: the name of this origin
-        :param function func: the function carried out by this origin
-        """
-        self.name = name
-        self.func = func
-        self.decoded_output = decoded_output
-        self.dimensions = dimensions
-
 class SimpleNode():
     """A SimpleNode allows you to put arbitary code as part of a Nengo model.
         
@@ -67,13 +52,8 @@ class SimpleNode():
         for name, method in inspect.getmembers(self, inspect.ismethod):
             if name.startswith('origin_'):
 
-                value = method() # initial output value = function value with input 0.0
-                if isinstance(value, Number): value = [value] # if scalar, make it a list
-                decoded_output = theano.shared(numpy.float32(value)) # theano internal state defining output value
-                # find number of parameters of the projected value
-                dimensions = len(value)
                 # add to dictionary of origins
-                self.origin[name[7:]] = SimpleOrigin(name[7:], method, decoded_output, dimensions)
+                self.origin[name[7:]] = Origin(func=method)
 
     def tick(self):
         """An extra utility function that is called every time step.

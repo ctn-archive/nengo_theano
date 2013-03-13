@@ -6,7 +6,7 @@ import numpy
 import numpy.random
 
 import neuron
-import origin
+import ensemble_origin
 from learned_termination import Null_Learned_Termination
 
 def make_encoders(neurons, dimensions, srng, encoders=None):
@@ -221,7 +221,7 @@ class Ensemble:
         :param list eval_points: specific set of points to optimize decoders over for this origin
         """
         if eval_points == None: eval_points = self.eval_points
-        self.origin[name] = origin.Origin(self, func, eval_points=eval_points)    
+        self.origin[name] = ensembl_origin.EnsembleOrigin(self, func, eval_points=eval_points)    
 
     def update(self):
         """Compute the set of theano updates needed for this ensemble
