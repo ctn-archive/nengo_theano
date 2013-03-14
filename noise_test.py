@@ -18,30 +18,27 @@ net.connect('in', 'B')
 net.connect('in', 'C')
 
 timesteps = 500
-# setup arrays to store data gathered from sim
-Invals = np.zeros((timesteps, 1))
-Avals = np.zeros((timesteps, 1))
-A2vals = np.zeros((timesteps, 1))
-Bvals = np.zeros((timesteps, 2))
-Cvals = np.zeros((timesteps, 3))
+dt_step = 0.01
+t = np.linspace(dt_step, timesteps*dt_step, timesteps)
+pstc = 0.01
+
+Ip = net.make_probe(net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+A2p = net.make_probe(net.nodes['A2'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Cp = net.make_probe(net.nodes['C'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
-for i in range(timesteps):
-    net.run(0.01)
-    Invals[i] = net.nodes['in'].decoded_output.get_value() 
-    Avals[i] = net.nodes['A'].origin['X'].decoded_output.get_value() 
-    A2vals[i] = net.nodes['A2'].origin['X'].decoded_output.get_value() 
-    Bvals[i] = net.nodes['B'].origin['X'].decoded_output.get_value() 
-    Cvals[i] = net.nodes['C'].origin['X'].decoded_output.get_value() 
+net.run(timesteps*dt_step)
 
 # plot the results
 plt.ion(); plt.close()
 plt.subplot(411); plt.title('Input')
-plt.plot(Invals)
+plt.plot(Ip.get_data())
 plt.subplot(412); plt.hold(1)
-plt.plot(Avals); plt.plot(A2vals)
+plt.plot(Ap.get_data()); plt.plot(A2p.get_data())
 plt.legend(['A noise = 1', 'A2 noise = 100'])
 plt.subplot(413); plt.title('B noise = 1000, type = gaussian')
-plt.plot(Bvals)
+plt.plot(Bp.get_data())
 plt.subplot(414); plt.title('C')
-plt.plot(Cvals)
+plt.plot(Cp.get_data())

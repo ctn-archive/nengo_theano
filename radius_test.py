@@ -31,24 +31,23 @@ net.connect('A', 'C', func=pow)
 net.connect('A', 'D', func=mult)
 
 timesteps = 500
-Fvals = np.zeros((timesteps,1))
-Avals = np.zeros((timesteps,1))
-Bvals = np.zeros((timesteps,1))
-Cvals = np.zeros((timesteps,1))
-Dvals = np.zeros((timesteps,1))
+dt_step = 0.01
+t = np.linspace(dt_step, timesteps*dt_step, timesteps)
+pstc = 0.01
+
+Ip = net.make_probe(net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Cp = net.make_probe(net.nodes['C'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Dp = net.make_probe(net.nodes['D'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+
 print "starting simulation"
-for i in range(timesteps):
-    net.run(0.01)
-    Fvals[i] = net.nodes['in'].decoded_output.get_value() 
-    Avals[i] = net.nodes['A'].origin['X'].decoded_output.get_value() 
-    Bvals[i] = net.nodes['B'].origin['X'].decoded_output.get_value()
-    Cvals[i] = net.nodes['C'].origin['X'].decoded_output.get_value()
-    Dvals[i] = net.nodes['D'].origin['X'].decoded_output.get_value()
+net.run(timesteps*dt_step)
 
 plt.ion(); plt.clf(); plt.hold(1);
-plt.plot(Fvals)
-plt.plot(Avals)
-plt.plot(Bvals)
-plt.plot(Cvals)
-plt.plot(Dvals)
-plt.legend(['Input','A','B','C'])
+plt.plot(Ip.get_data())
+plt.plot(Ap.get_data())
+plt.plot(Bp.get_data())
+plt.plot(Cp.get_data())
+plt.plot(Dp.get_data())
+plt.legend(['Input','A','B','C','D'])

@@ -123,6 +123,7 @@ class Ensemble:
         self.radius = radius
         self.eval_points = eval_points
         self.noise = noise
+        self.dt = dt
         self.noise_type = noise_type
         if self.noise: # if a noise variance was specified
             self.srng = RandomStreams(seed=self.seed) # setup theano random number generator to generate noise
@@ -259,8 +260,8 @@ class Ensemble:
                                                   std=numpy.sqrt(self.noise/self.dt))
             elif self.noise_type.lower() == 'uniform':
                 input_current += self.srng.uniform(size=input_current.shape, 
-                                                   low=-self.noise/numpy.sqrt(dt), 
-                                                   high=self.noise/numpy.sqrt(dt))
+                                                   low=-self.noise/numpy.sqrt(self.dt), 
+                                                   high=self.noise/numpy.sqrt(self.dt))
         
         # pass that total into the neuron model to produce the main theano computation
         updates = self.neurons.update(input_current) # updates is an ordered dictionary of theano internal variables to update

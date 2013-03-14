@@ -1,6 +1,7 @@
 import inspect
 import numpy
 import theano
+import origin
 from numbers import Number
 
 class SimpleNode():
@@ -53,7 +54,7 @@ class SimpleNode():
             if name.startswith('origin_'):
 
                 # add to dictionary of origins
-                self.origin[name[7:]] = Origin(func=method)
+                self.origin[name[7:]] = origin.Origin(func=method)
 
     def tick(self):
         """An extra utility function that is called every time step.
