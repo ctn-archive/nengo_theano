@@ -13,7 +13,7 @@ net.make('B', 100, 1, encoders=[[1]], intercept=(0,1.0))
 net.connect('in', 'A')
 net.connect('A', 'B')
 
-timesteps = 1000
+timesteps = 5000
 dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01

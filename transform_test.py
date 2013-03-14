@@ -18,19 +18,21 @@ transform = [[0,1],[1,0],[1,-1]]
 net.connect('in', 'A', transform=transform)
 
 timesteps = 500
-Fvals = np.zeros((timesteps,2))
-Avals = np.zeros((timesteps,3))
-for i in range(timesteps):
-    net.run(0.01)
-    Fvals[i] = net.nodes['in'].decoded_output.get_value() 
-    Avals[i] = net.nodes['A'].origin['X'].decoded_output.get_value() 
+dt_step = 0.01
+t = np.linspace(dt_step, timesteps*dt_step, timesteps)
+pstc = 0.01
+Ip = net.make_probe(net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+
+print "starting simulation"
+net.run(timesteps*dt_step)
 
 plt.ion(); plt.clf(); 
 plt.subplot(411); plt.title('Input')
-plt.plot(Fvals); plt.legend(['In(0)','In(1)'])
+plt.plot(Ip.get_data()); plt.legend(['In(0)','In(1)'])
 plt.subplot(412); plt.title('A(0) = In(1)')
-plt.plot(Avals[:,0])
+plt.plot(Ap.get_data()[:,0])
 plt.subplot(413); plt.title('A(1) = In(0)')
-plt.plot(Avals[:,1])
+plt.plot(Ap.get_data()[:,1])
 plt.subplot(414); plt.title('A(2) = In(0) - In(1)')
-plt.plot(Avals[:,2])
+plt.plot(Ap.get_data()[:,2])

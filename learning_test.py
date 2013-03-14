@@ -27,7 +27,7 @@ net.connect('in', 'A')
 net.connect('A', 'error1')
 net.connect('B', 'error1', weight=-1)
 
-t_final = 10.
+t_final = 30
 dt_step = 0.01
 pstc = 0.03
 
