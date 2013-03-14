@@ -31,9 +31,9 @@ inhib_matrix = [[-10] * dimensions] * neurons
 net.connect('in1', 'A')
 net.connect('in2', 'B', index_pre=0)
 net.connect('in2', 'B2')
-net.connect('A', 'B', decoded_weight_matrix=inhib_matrix)
-net.connect('A', 'B2', decoded_weight_matrix=inhib_matrix) 
-#net.connect('A', 'B3', decoded_weight_matrix=[-10]) 
+net.connect('A', 'B', transform=inhib_matrix)
+net.connect('A', 'B2', transform=inhib_matrix) 
+#net.connect('A', 'B3', transform=[-10]) 
 
 timesteps = 500
 dt_step = 0.01

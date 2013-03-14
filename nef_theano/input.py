@@ -23,8 +23,8 @@ class Input:
         if callable(value): # if value parameter is a python function
             self.origin['X'] = origin.Origin(func=value)
         else:
-            if isinstance(value, Number): value = [value] # if scalar, make it a list
-            self.origin['X'] = origin.Origin(func=None, initial_value=numpy.array(value))
+            # if isinstance(value, Number): value = [value] # if scalar, make it a list
+            self.origin['X'] = origin.Origin(func=None, initial_value=value)
 
     def reset(self):
         """Resets the function output state values

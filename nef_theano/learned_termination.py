@@ -36,18 +36,19 @@ class LearnedTermination(object):
     def learn(self): raise NotImplementedError()
     """The learning function, to be implemented by any specific learning subclasses.
 
-    :returns The updated value for the weight matrix, as a Theano variable.
+    :returns: The updated value for the weight matrix, as a Theano variable.
     """
 
     def update(self):
         """The updates to the weight matrix calculation.
-        Returns a dictionary with the new weight_matrix.
+        :returns: a dictionary with the new weight_matrix.
         """
         # multiply the output by the attached ensemble's radius to put us back in the right range
         return collections.OrderedDict( {self.weight_matrix: self.learn()} ) 
 
         
 class NullLearnedTermination(LearnedTermination):
+    """This is a stub learning termination for architecture testing"""
     def learn(self):
         return self.weight_matrix
 
@@ -75,9 +76,8 @@ class hPESTermination(LearnedTermination):
         self.encoders = self.post.encoders.astype('float32')
         self.gains = np.sqrt((self.post.encoders**2).sum(axis=-1)).astype('float32')
 
-        post_num = self.post.neurons_num
         self.initial_theta = np.random.uniform(
-            low=5e-5, high=15e-5, size=post_num).astype('float32')
+            low=5e-5, high=15e-5, size=self.post.neurons_num * self.post.array_size).astype('float32')
         self.initial_theta *= self.gains # Trevor's assumption: high gain -> high theta
         self.theta = theano.shared(self.initial_theta, name='theta')
 
@@ -100,22 +100,18 @@ class hPESTermination(LearnedTermination):
             (self.post_filtered*(self.post_filtered-self.theta)*self.gains)[:,None]
 
         return self.weight_matrix +\
-            TT.cast(self.supervision_ratio, 'float32')*delta_supervised +\
-            TT.cast(1. - self.supervision_ratio, 'float32')*delta_unsupervised
+            TT.cast(self.supervision_ratio, 'float32') * delta_supervised +\
+            TT.cast(1. - self.supervision_ratio, 'float32') * delta_unsupervised
         
     def update(self):
         # update filtered inputs
-        alpha = TT.cast(self.dt/self.pstc, dtype='float32')
-        new_pre = self.pre_filtered + alpha*(self.pre_spikes.flatten() - self.pre_filtered)
-        new_post = self.post_filtered + alpha*(self.post_spikes.flatten() - self.post_filtered)
+        alpha = TT.cast(self.dt / self.pstc, dtype='float32')
+        new_pre = self.pre_filtered + alpha * (self.pre_spikes.flatten() - self.pre_filtered)
+        new_post = self.post_filtered + alpha * (self.post_spikes.flatten() - self.post_filtered)
 
         # update theta
-        alpha = TT.cast(self.dt/self.theta_tau, dtype='float32')
-        new_theta = self.theta + alpha*(new_post - self.theta)
+        alpha = TT.cast(self.dt / self.theta_tau, dtype='float32')
+        new_theta = self.theta + alpha * (new_post - self.theta)
 
-        return collections.OrderedDict(
-            {self.weight_matrix: self.learn(),
-             self.pre_filtered: new_pre,
-             self.post_filtered: new_post,
-             self.theta: new_theta})
-
+        return collections.OrderedDict( {self.weight_matrix: self.learn(), self.pre_filtered: new_pre, 
+                                         self.post_filtered: new_post, self.theta: new_theta})

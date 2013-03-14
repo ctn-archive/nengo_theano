@@ -9,6 +9,8 @@ import neuron
 import ensemble_origin
 from learned_termination import hPESTermination
 
+#TODO: straighten out this business for generating network arrays! looks like only one set of encoders is generated...????
+
 def make_encoders(neurons, dimensions, srng, encoders=None):
     """Generates a set of encoders
 
@@ -41,16 +43,18 @@ class Accumulator:
         :param float pstc: post-synaptic time constant on filter
         """
         self.ensemble = ensemble
+    
+        self.decay = numpy.exp(-self.ensemble.neurons.dt / pstc) # time constant for filter
+        self.decoded_total = None # the theano object representing the sum of the decoded inputs to this filter
+        self.encoded_total = None # the theano object representing the sum of the encoded inputs to this filter
+        self.learn_total = None # the theano object representing the sum of the learned inputs to this filter
+
         # decoded_input should be dimensions * array_size because we account for the transform matrix here, so different array networks get different input
         self.decoded_input = theano.shared(numpy.zeros(self.ensemble.dimensions * self.ensemble.array_size).astype('float32')) # the initial filtered decoded input 
         # encoded_input, however, is the same for all networks in the arrays, connecting directly to the neurons, so only needs to be size neurons_num
         self.encoded_input = theano.shared(numpy.zeros(self.ensemble.neurons_num).astype('float32')) # the initial filtered encoded input 
         # learn_input, is different for all networks in the arrays, connecting directly to the neurons, so it needs to be size neurons_num * array_size
         self.learn_input = theano.shared(numpy.zeros(self.ensemble.neurons_num * self.ensemble.array_size).astype('float32')) # the initial filtered encoded input 
-        self.decay = numpy.exp(-self.ensemble.neurons.dt / pstc) # time constant for filter
-        self.decoded_total = None # the theano object representing the sum of the decoded inputs to this filter
-        self.encoded_total = None # the theano object representing the sum of the encoded inputs to this filter
-        self.learn_total = None # the theano object representing the sum of the learned inputs to this filter
 
     def add_decoded_input(self, decoded_input):
         """Add to the current set of decoded inputs (with the same post-synaptic time constant pstc) an additional input

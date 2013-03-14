@@ -69,11 +69,9 @@ class Network:
             transform[post][pre] = weight
         return transform
         
-    def connect(self, pre, post, pstc=0.01, transform=None, weight=1, index_pre=None, index_post=None, 
-                func=None, decoded_weight_matrix=None):
+    def connect(self, pre, post, pstc=0.01, transform=None, weight=1, index_pre=None, index_post=None, func=None):
         """Connect two nodes in the network.
         Note: cannot specify (transform) AND any of (weight, index_pre, index_post) 
-              cannot specify (weight_matrix) AND any of (transform, weight, index_pre, index_post, func, origin_name)
 
         *pre* and *post* can be strings giving the names of the nodes, or they
         can be the nodes themselves (FunctionInputs and NEFEnsembles are
@@ -84,6 +82,10 @@ class Network:
         the new termination. You can also use *weight*, *index_pre*, and *index_post*
         to define a transformation matrix instead.  *weight* gives the value,
         and *index_pre* and *index_post* identify which dimensions to connect.
+        transform can be of several sizes: 
+        post.dimensions x pre.dimensions - specify where decoded signal dimensions project
+        post.neurons x pre.dimensions - overwrites post encoders, i.e. inhibitory connections
+        post.neurons x pre.neurons - fully specify the connection weight matrix 
 
         If *func* is not None, a new Origin will be created on the pre-synaptic
         ensemble that will compute the provided function. The name of this origin 
@@ -113,57 +115,69 @@ class Network:
         :param string origin_name: Name of the origin to check for / create to compute the given function.
                                    Ignored if func is None.  If an origin with this name already
                                    exists, the existing origin is used instead of creating a new one.
-        :param decoded_weight_matrix: For directly connecting the decoded output of the pre population 
-                                to the neurons of the post population, should be (post.neurons_num x pre.dimensions)
         """
-        # make sure contradicting things aren't simultaneously specified
-        if decoded_weight_matrix is not None:
-            assert (transform is None) and (weight == 1) and (index_pre is None) and (index_post is None) and (func is None)
-        else: 
-            assert not (transform is not None and ((weight != 1) or (index_pre is not None) or (index_post is not None)))
-        
-        self.theano_tick = None  # reset timer in case the model has been run previously, as adding a new node means we have to rebuild the theano function
-        
         pre = self.get_object(pre) # get pre Node object from node dictionary
         post = self.get_object(post) # get post Node object from node dictionary
+      
+        # reset timer in case the model has been run previously, as adding a new node means we have to rebuild the theano function 
+        self.theano_tick = None  
     
-        if decoded_weight_matrix is None: # if we're doing a decoded connection
-            if isinstance(pre, origin.Origin): # see if we have an origin or not
-                decoded_output = pre.decoded_output
-                dim_pre = pre.dimensions
-            else:
-                if func is not None: 
-                    origin_name = func.__name__ # if no name provided, take name of function being calculated
-                    #TODO: better analysis to see if we need to build a new origin (rather than just relying on the name)
-                    if origin_name not in pre.origin: # if an origin for this function hasn't already been created
-                        pre.add_origin(origin_name, func) # create origin with to perform desired func
-                else:                    
-                    origin_name = 'X' # otherwise take default identity decoded output from pre population
-                decoded_output = pre.origin[origin_name].decoded_output
-                dim_pre = pre.origin[origin_name].dimensions # if ensemble, need to get pre dimensions from origin
+        # check to see if there is a transform
+        # if there is, and it's [0] dimension is post.neurons_num or post.neurons_num * post.array_size then assume encoded connection
+        # otherwise it's a decoded connection
+     
+        if transform is not None: 
+            # make sure contradicting things aren't simultaneously specified
+            assert (weight == 1) and (index_pre is None) and (index_post is None)
 
-            # compute transform matrix if not given
-            if transform is None:
-                transform = self.compute_transform(dim_pre=dim_pre, dim_post=post.dimensions * post.array_size, weight=weight, index_pre=index_pre, index_post=index_post)
+            transform = numpy.array(transform)
+            # check to see if it's an encoded connection
+            if transform.shape[0] != post.dimensions:
+                #TODO: optimization: move this transform hstack instead to a theano TT function on encoded_output instead so the 
+                # dot product for encoded output is quicker when network array w same projection to each ensemble
+                # just have to make sure that encoded output ends up being (post.neurons_num x post.array_size)
+                #if transform.shape[0] == post.neurons_num: 
+                #    transform = numpy.vstack([transform]*post.array_size)
+                #assert transform.shape[0] == post.neurons_num * post.array_size
+                assert func == None # can't specify a function with an encoded connection
+                # also can't get encoded output from Input or SimpleNode objects
+                assert not (isinstance(pre, input.Input) or isinstance(pre, simplenode.SimpleNode)) 
 
-            # apply transform matrix, directing pre dimensions to specific post dimensions
-            decoded_output = TT.dot(numpy.array(transform), decoded_output)
+                # get the instantaneous spike raster from the pre population
+                neuron_output = pre.neurons.output 
+                # the encoded input to the next population is the spikes x weight matrix
+                # dot product is opposite order than for decoded_output because of neurons.output shape
+                encoded_output = TT.dot(neuron_output, transform)
+                
+                # pass in the pre population encoded output function to the post population, connecting them for theano
+                post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
+                return
+        
+        # if we're doing a decoded connection 
+        if not isinstance(pre, origin.Origin): # see if pre is the origin we want to connect to or not
+            # if pre is not an origin, find the origin the projection originates from
+            origin_name = 'X' # take default identity decoded output from pre population
+            if func is not None: # if we're supposed to compute a function on this connection create an origin to do it
+                origin_name = func.__name__ # set name as the function being calculated
+                #TODO: better analysis to see if we need to build a new origin (rather than just relying on the name)
+                if origin_name not in pre.origin: # if an origin for this function hasn't already been created
+                    pre.add_origin(origin_name, func) # create origin with to perform desired func
+            pre = pre.origin[origin_name]
+        else: # if pre is an origin, make sure a function wasn't given 
+            assert func == None # can't specify a function for an already created origin
 
-            # pass in the pre population decoded output function to the post population, connecting them for theano
-            post.add_filtered_input(pstc=pstc, decoded_input=decoded_output) 
+        decoded_output = pre.decoded_output
+        dim_pre = pre.dimensions
 
-        else: # if we're doing an encoded connection
-            # can't get encoded output from Input or SimpleNode objects
-            assert not (isinstance(pre, input.Input) or isinstance(pre, simplenode.SimpleNode)) 
+        if transform is None: # compute transform matrix if not given
+            transform = self.compute_transform(dim_pre=dim_pre, dim_post=post.dimensions * post.array_size, 
+                                weight=weight, index_pre=index_pre, index_post=index_post)
 
-            # get the instantaneous spike raster from the pre population
-            neuron_output = pre.neurons.output 
-            # the encoded input to the next population is the spikes x weight matrix
-            # dot product is opposite order than for decoded_output because of neurons.output shape
-            encoded_output = TT.dot(neuron_output, numpy.array(decoded_weight_matrix))
-            
-            # pass in the pre population encoded output function to the post population, connecting them for theano
-            post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
+        # apply transform matrix, directing pre dimensions to specific post dimensions
+        decoded_output = TT.dot(transform, decoded_output)
+
+        # pass in the pre population decoded output function to the post population, connecting them for theano
+        post.add_filtered_input(pstc=pstc, decoded_input=decoded_output) 
 
     def get_object(self, name):
         """This is a method for parsing input to return the proper object
