@@ -34,7 +34,7 @@ class Probe(object):
         if i_samp > self.i:
             self.i = i_samp
             # we're as close to a sample point as we're going to get, so take a sample
-            if i_samp > len(self.data): 
+            if i_samp >= len(self.data): 
                 self.data = np.vstack(  # increase the buffer
                     [self.data, np.zeros((self.buffer_size,) + self.data.shape[1:])])
 
