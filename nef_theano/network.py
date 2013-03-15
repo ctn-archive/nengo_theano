@@ -31,12 +31,17 @@ class Network:
           
     def add(self, node):
         """Add an arbitrary non-theano node to the network.
-        Specifically used for inputs and SimpleNodes.
+
+        Used for inputs, SimpleNodes, and Probes. These nodes will be added to
+        the Theano graph if the node has an "update()" function, but will also
+        be triggered explicitly at every tick via the node's "theano_tick()"
+        function.
         
-        :param Node node: 
+        :param Node node: the node to add to this network
         """
-        self.tick_nodes.append(node)        
-        self.nodes[node.name]=node
+        self.theano_tick = None # remake theano_tick function, in case the node has Theano updates 
+        self.tick_nodes.append(node)
+        self.nodes[node.name] = node
 
     def compute_transform(self, dim_pre, dim_post, weight=1, index_pre=None, index_post=None):
         """Helper function used by :func:`nef.Network.connect()` to create the 
@@ -223,6 +228,7 @@ class Network:
         e = ensemble.Ensemble(*args, **kwargs) 
 
         self.nodes[name] = e # store created ensemble in node dictionary
+        return e
 
     def make_array(self, name, neurons, array_size, dimensions=1, **kwargs): 
         """Generate a network array specifically, for legacy code \ non-theano API compatibility
@@ -232,7 +238,9 @@ class Network:
     def make_input(self, *args, **kwargs): 
         """ # Create an input and add it to the network
         """
-        self.add(input.Input(*args, **kwargs))
+        i = input.Input(*args, **kwargs)
+        self.add(i)
+        return i
 
     def make_probe(self, target, name=None, dt_sample=0.01, **kwargs):
         """Add a probe to measure the given target.
