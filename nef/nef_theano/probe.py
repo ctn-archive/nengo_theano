@@ -20,7 +20,7 @@ class Probe(object):
         self.pstc = pstc
 
         target_value = np.zeros_like(target.get_value())
-        print target.get_value()
+        print name, 'target_value.get_value():', target.get_value()
         print 'target_value.shape:', target_value.shape
         self.data = np.zeros((self.buffer_size,) + target_value.shape)
 

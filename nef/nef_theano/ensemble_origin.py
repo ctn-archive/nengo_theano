@@ -22,10 +22,10 @@ class EnsembleOrigin(Origin):
         """
         self.ensemble = ensemble
         self.decoders = self.compute_decoders(func, eval_points)
-        # decoders is array * neurons * dimensions,
-        # initial value should have dimensions * array_size values
+        # decoders is array_size * neurons_num * func_dimensions, 
+        # initial value should have array_size values * func_dimensions
         initial_value = np.zeros(
-            self.decoders.shape[0] * self.decoders.shape[2]) 
+            self.ensemble.array_size * self.decoders.shape[2]) 
         Origin.__init__(self, func=func, initial_value=initial_value)
     
     def compute_decoder(self, func, eval_points=None):     
@@ -88,21 +88,18 @@ class EnsembleOrigin(Origin):
         # so in parallel we can calculate the activity
         # of all of the neurons at each sample point 
         neurons = self.ensemble.neurons.__class__(
-            size=(self.ensemble.neurons_num, self.num_samples),
+            size=(self.ensemble.neurons_num, self.num_samples), 
             tau_rc=self.ensemble.neurons.tau_rc,
             tau_ref=self.ensemble.neurons.tau_ref)
 
         # set up matrix to store decoders,
-        # should be (array_size * neurons_num * dim_func) 
+        # should be (array_size x neurons_num x dim_func) 
         decoders = np.zeros((self.ensemble.array_size,
                              self.ensemble.neurons_num,
                              target_values.shape[0]))
 
         for index in range(self.ensemble.array_size): 
-
             # compute the input current for every neuron and every sample point
-            #print 'self.ensemble.encoders.shape', self.ensemble.encoders.shape
-            #print 'eval_points.shape', eval_points.shape
             J = np.dot(self.ensemble.encoders[index], eval_points)
             J += self.ensemble.bias[index][:, np.newaxis]
 
@@ -141,12 +138,8 @@ class EnsembleOrigin(Origin):
             #Ginv=np.linalg.pinv(G, rcond=.01)  
             
             # compute decoders - least squares method 
-            print 'decoder set.shape', (
-                np.dot(Ginv, U) / (self.ensemble.neurons.dt)).shape
-            print 'decoders[index].shape', decoders[index].shape 
             decoders[index] = np.dot(Ginv, U) / (self.ensemble.neurons.dt)
 
-        #print decoders
         return decoders.astype('float32')
 
     def make_samples(self):
