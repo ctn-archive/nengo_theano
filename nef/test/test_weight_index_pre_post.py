@@ -1,13 +1,15 @@
-"""This is a test file to test the weight, index_pre, and index_post parameters 
-   on the connect function. 
+"""This is a test file to test the weight, index_pre, and index_post parameters
+on the connect function. 
 """
 
-import nef_theano as nef
 import math
+
 import numpy as np
 import matplotlib.pyplot as plt
 
-net=nef.Network('Weight, Index_Pre, and Index_Post Test')
+from .. import nef_theano as nef
+
+net = nef.Network('Weight, Index_Pre, and Index_Post Test')
 net.make_input('in', value=math.sin)
 net.make('A', 300, 1)
 net.make('B', 300, 1)
@@ -27,18 +29,25 @@ timesteps = 500
 dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01
-Ip = net.make_probe(net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Cp = net.make_probe(net.nodes['C'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Dp = net.make_probe(net.nodes['D'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Ep = net.make_probe(net.nodes['E'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Fp = net.make_probe(net.nodes['F'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Ip = net.make_probe(net.nodes['in'].origin['X'].decoded_output,
+                    dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output,
+                    dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output,
+                    dt_sample=dt_step, pstc=pstc)
+Cp = net.make_probe(net.nodes['C'].origin['X'].decoded_output,
+                    dt_sample=dt_step, pstc=pstc)
+Dp = net.make_probe(net.nodes['D'].origin['X'].decoded_output,
+                    dt_sample=dt_step, pstc=pstc)
+Ep = net.make_probe(net.nodes['E'].origin['X'].decoded_output,
+                    dt_sample=dt_step, pstc=pstc)
+Fp = net.make_probe(net.nodes['F'].origin['X'].decoded_output,
+                    dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
 net.run(timesteps*dt_step)
 
-plt.ion(); plt.close(); 
+plt.ioff(); plt.close(); 
 plt.subplot(711); plt.title('Input')
 plt.plot(Ip.get_data())
 plt.subplot(712); plt.title('A = Input * .5')
@@ -53,3 +62,5 @@ plt.subplot(716); plt.title('E(0:1) = C(1)')
 plt.plot(Ep.get_data())
 plt.subplot(717); plt.title('F(0) = C(1)')
 plt.plot(Fp.get_data())
+plt.tight_layout()
+plt.show()

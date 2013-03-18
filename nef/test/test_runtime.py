@@ -1,8 +1,9 @@
-"""This test file is for checking the run time of the theano code"""
+"""This test file is for checking the run time of the theano code."""
 
-import nef_theano as nef
 import math
 import time
+
+from .. import nef_theano as nef
 
 net=nef.Network('Runtime Test')
 net.make_input('in', value=math.sin)
@@ -14,6 +15,7 @@ net.make('D', 1000, 1)
 # some functions to use in our network
 def pow(x):
     return [xval**2 for xval in x]
+
 def mult(x):
     return [xval*2 for xval in x]
 
