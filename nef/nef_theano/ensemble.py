@@ -426,13 +426,13 @@ class Ensemble:
         #TODO: optimize for when nothing is added to X
         # (ie there are no decoded inputs)
 
-        new_J = []
-        for index in range(self.array_size):
-            print 'J[index].shape', J[index].shape
-            print 'X[index].eval().shape', X[index].eval().shape
-            print 'X[index].eval()', X[index].eval()
-            print 'self.encoders[index].shape', self.encoders[index].shape
-            new_J.append(TT.dot(self.encoders[index], X[index].T) + J[index])
+        # find input current caused by decoded input signals,
+        # avoiding transposing our 3D matrix self.encoders
+        
+        # add to input current for each neuron as
+        # represented input signal * preferred direction
+        J = [J[i] + TT.dot(self.encoders[i], X[i].T)
+             for i in range(self.array_size)]
 
         print new_J
         # calculate input_current for each neuron
