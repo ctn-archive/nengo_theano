@@ -398,14 +398,13 @@ class Ensemble:
 
         Returns a dictionary with new neuron state,
         termination, and origin values.
-        
+
         """
+        
         ### find the total input current to this population of neurons
 
         # apply respective biases to neurons in the population 
         J = np.array(self.bias)
-
-        print 'self.bias', self.bias
         # set up matrix to store accumulated decoded input,
         # same size as decoded_input
         X = np.zeros((self.array_size, self.dimensions))
@@ -427,17 +426,17 @@ class Ensemble:
         #TODO: optimize for when nothing is added to X
         # (ie there are no decoded inputs)
 
-        #print 'X.eval().shape', X.eval().shape
-        #print 'encoders.shape', self.encoders.shape
-        #print 'encoders[0].shape', self.encoders[0].shape
         new_J = []
         for index in range(self.array_size):
-            #print 'J[index]', J[index]
-            #print 'X[index].eval()', X[index].eval()
-            #print 'self.encoders[index]', self.encoders[index]
+            print 'J[index].shape', J[index].shape
+            print 'X[index].eval().shape', X[index].eval().shape
+            print 'X[index].eval()', X[index].eval()
+            print 'self.encoders[index].shape', self.encoders[index].shape
             new_J.append(TT.dot(self.encoders[index], X[index].T) + J[index])
+
+        print new_J
         # calculate input_current for each neuron
-        # as represented input signal * preferred direction
+        # as represented input signal x preferred direction
         J = new_J 
 
         # if noise has been specified for this neuron,
@@ -465,10 +464,8 @@ class Ensemble:
             # internal theano variables for the accumulators
             if hasattr(a, 'new_decoded_input'):
                 # if there's a decoded input in this accumulator,
-                #print 'a.new_decoded_input', a.new_decoded_input.eval()
                 # add accumulated decoded inputs to theano variable updates
                 updates[a.decoded_input] = a.new_decoded_input.astype('float32')
-                print 'after decoded update'
             if hasattr(a, 'new_encoded_input'):
                 # if there's an encoded input in this accumulator,
                 # add accumulated encoded inputs to theano variable updates

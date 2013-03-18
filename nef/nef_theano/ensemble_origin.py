@@ -176,18 +176,11 @@ class EnsembleOrigin(Origin):
             from the attached population
 
         """
-
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range
-
-        #np.zeros(self.ensemble.dimensions * self.ensemble.array_size)
-        decoded_output = np.array([])
-        for i in range(self.ensemble.array_size):
-            #print 'decoders[i]:', self.decoders[i]
-            #print 'spikes[i]:', spikes[i].eval()
-            a = TT.dot(spikes[i], self.decoders[i])
-            decoded_output = TT.concatenate([decoded_output, a])
+        decoded_output = TT.concatenate(
+            [TT.dot(spikes[i], self.decoders[i])
+             for i in range(self.ensemble.array_size)])
         decoded_output = TT.mul(
             decoded_output, self.ensemble.radius).astype('float32')
-        #print 'decoded_output here: ', decoded_output.eval()
         return collections.OrderedDict({self.decoded_output: decoded_output})
