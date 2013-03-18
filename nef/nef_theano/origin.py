@@ -28,6 +28,7 @@ class Origin(object):
             initial_value = [initial_value]
 
         # theano internal state defining output value
+        print 'initial_value:', initial_value
         self.decoded_output = theano.shared(np.float32(initial_value)) 
 
         # find number of parameters of the projected value

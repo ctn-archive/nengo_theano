@@ -7,36 +7,6 @@ from . import neuron
 from . import ensemble_origin
 from .learned_termination import hPESTermination
 
-#TODO: straighten out this business for generating network arrays! looks like only one set of encoders is generated...????
-
-def make_encoders(neurons, dimensions, srng, encoders=None):
-    """Generates a set of encoders.
-
-    :param int neurons: number of neurons
-    :param int dimensions: number of dimensions
-    :param theano.tensor.shared_randomstreams srng:
-        theano random number generator
-    :param list encoders: set of possible preferred directions of neurons
-
-    """
-    if encoders is None:
-         # if no encoders specified, generate randomly
-        encoders = srng.normal((neurons, dimensions))
-    else:
-        # ensure we're working with np arrays
-        encoders = np.array(encoders)
-        # repeat array until 'encoders' is the same length
-        # as number of neurons in population
-        encoders = np.tile(encoders, (neurons / len(encoders) + 1, 1)
-                           )[:neurons, :dimensions]
-
-    # normalize encoders across represented dimensions
-    norm = TT.sum(encoders * encoders, axis=[1], keepdims=True)
-    encoders = encoders / TT.sqrt(norm)
-
-    return theano.function([], encoders)()
-
-
 class Accumulator:
     def __init__(self, ensemble, pstc):
         """A collection of terminations in the same population
@@ -56,32 +26,43 @@ class Accumulator:
 
         # time constant for filter
         self.decay = np.exp(-self.ensemble.neurons.dt / pstc)
-        # theano object representing the sum of decoded inputs to this filter
+        # the theano object representing the sum
+        # of the decoded inputs to this filter
         self.decoded_total = None
-        # theano object representing the sum of encoded inputs to this filter
+        # the theano object representing the sum
+        # of the encoded inputs to this filter
         self.encoded_total = None
-        # theano object representing the sum of learned inputs to this filter
-        self.learn_total = None
+        # the theano object representing the sum
+        # of the learned inputs to this filter
+        self.learn_total = None 
 
         # decoded_input should be dimensions * array_size
         # because we account for the transform matrix here,
         # so different array networks get different input
+
+        # the initial filtered decoded input 
         self.decoded_input = theano.shared(np.zeros(
-                self.ensemble.dimensions * self.ensemble.array_size
-                ).astype('float32'))
-        
-        # encoded_input, however, is the same for all networks
-        # in the arrays, connecting directly to the neurons,
-        # so only needs to be size neurons_num
+                (self.ensemble.array_size, self.ensemble.dimensions)
+                ).astype('float32'), name='accumulator.decoded_input')
+
+        # encoded_input specifies input into each neuron,
+        # so it is array_size * neurons_num
+
+        # the initial filtered encoded input 
         self.encoded_input = theano.shared(np.zeros(
-                self.ensemble.neurons_num).astype('float32'))
+                (self.ensemble.array_size, self.ensemble.neurons_num)
+                ).astype('float32'), name='accumulator.encoded_input')
         
-        # learn_input is different for all networks in the arrays,
-        # connecting directly to the neurons, so it needs to be
-        # size neurons_num * array_size
+        # learn_input specifies input into each neuron,
+        # but current from different terminations can't be amalgamated
+        #TODO: make learn input a dictionary that stores
+        # a shared variable of the input current for each different
+        # termination, for use by learned_termination
+
+        # the initial filtered encoded input 
         self.learn_input = theano.shared(np.zeros(
-                self.ensemble.neurons_num * self.ensemble.array_size
-                ).astype('float32'))
+                (self.ensemble.array_size, self.ensemble.neurons_num)
+                ).astype('float32'), name='accumulator.learn_input')
 
     def add_decoded_input(self, decoded_input):
         """Adds a decoded input to this accumulator.
@@ -133,11 +114,9 @@ class Accumulator:
             # add input encoded input (current) to neurons
             self.encoded_total = self.encoded_total + encoded_input 
 
-        # flatten because a col + a vec gives a matrix type,
-        # but it's actually just a vector still
-        self.new_encoded_input = TT.flatten(
-            self.decay * self.encoded_input + (1 - self.decay)
-            * self.encoded_total)
+        # the theano object representing the filtering operation
+        self.new_encoded_input = self.decay * self.encoded_input + (
+            1 - self.decay) * self.encoded_total
 
     def add_learn_input(self, learn_input):
         """Adds a learned input to this accumulator.
@@ -153,6 +132,7 @@ class Accumulator:
         :param learn_input:
             theano object representing the current output of every
             neuron of the pre population * a connection weight matrix
+
         """
         if self.learn_total is None:
             # initialize internal value
@@ -162,11 +142,9 @@ class Accumulator:
             # add input learn input (current) to neurons
             self.learn_total = self.learn_total + learn_input 
 
-        # flatten because a col + a vec gives a matrix type,
-        # but it's actually just a vector still
-        self.new_learn_input = TT.flatten(
-            self.decay * self.learn_input + (1 - self.decay)
-            * self.learn_total)
+        # the theano object representing the filtering operation
+        self.new_learn_input = self.decay * self.learn_input + (
+            1 - self.decay) * self.learn_total 
 
 
 class Ensemble:
@@ -240,21 +218,28 @@ class Ensemble:
 
         # compute alpha and bias
         self.srng = RandomStreams(seed=self.seed)
-        max_rates = self.srng.uniform([self.neurons_num],
-                                      low=max_rate[0], high=max_rate[1])
-        threshold = self.srng.uniform([self.neurons_num],
-                                      low=intercept[0], high=intercept[1])
+        max_rates = self.srng.uniform(
+            size=(self.array_size, self.neurons_num),
+            low=max_rate[0], high=max_rate[1])  
+        threshold = self.srng.uniform(
+            size=(self.array_size, self.neurons_num),
+            low=intercept[0], high=intercept[1])
         alpha, self.bias = theano.function(
             [], self.neurons.make_alpha_bias(max_rates, threshold))()
 
         # force to 32 bit for consistency / speed
         self.bias = self.bias.astype('float32') 
 
+        print 'bias.shape', self.bias.shape
+        print 'alpha.shape', alpha.shape
+
         # compute encoders
-        self.encoders = make_encoders(self.neurons_num, dimensions,
-                                      self.srng, encoders=encoders)
+        self.encoders = self.make_encoders(encoders=encoders)
+        print 'encoders.T.shape', self.encoders.T.shape
+
         # combine encoders and gain for simplification
         self.encoders = (self.encoders.T * alpha).T 
+        print 'encoders.T.shape', self.encoders.T.shape
 
         # origins stored in a dictionary
         self.origin = {}
@@ -344,8 +329,8 @@ class Ensemble:
         # random numbers between -.001 and .001
         if weight_matrix is None:
             weight_matrix = np.random.uniform(
-                size=(self.neurons_num * self.array_size,
-                      pre.neurons_num * pre.array_size),
+                size=(self.array_size * pre.array_size,
+                      self.neurons_num, pre.neurons_num),
                 low=-.001, high=.001)
         else:
             # make sure it's an np.array
@@ -377,6 +362,37 @@ class Ensemble:
         self.origin[name] = ensemble_origin.EnsembleOrigin(
             self, func, eval_points=eval_points)
 
+    def make_encoders(self, encoders=None):
+        """Generates a set of encoders.
+
+        :param int neurons: number of neurons 
+        :param int dimensions: number of dimensions
+        :param theano.tensor.shared_randomstreams snrg:
+            theano random number generator function
+        :param list encoders:
+            set of possible preferred directions of neurons
+
+        """
+
+        if encoders is None:
+            # if no encoders specified, generate randomly
+            encoders = self.srng.normal(
+                (self.array_size, self.neurons_num, self.dimensions))
+        else:
+            # if encoders were specified, cast list as array
+            encoders = np.array(encoders)
+            # repeat array until 'encoders' is the same length
+            # as number of neurons in population
+            encoders = np.tile(encoders,
+                (self.array_size, self.neurons_num / len(encoders) + 1)
+                )[:, :self.neurons_num, :self.dimensions]
+           
+        # normalize encoders across represented dimensions 
+        norm = TT.sum(encoders * encoders, axis=[1], keepdims=True)
+        encoders = encoders / TT.sqrt(norm)        
+
+        return theano.function([], encoders)()
+
     def update(self):
         """Compute the set of theano updates needed for this ensemble.
 
@@ -387,95 +403,85 @@ class Ensemble:
 
         ### find the total input current to this population of neurons
 
-        # apply respective biases to neurons in the population
-        input_current = np.tile(self.bias, (self.array_size, 1))
+        # apply respective biases to neurons in the population 
+        J = np.array(self.bias)
 
-        # set up matrix to store accumulated decoded input
+        # set up matrix to store accumulated decoded input,
         # same size as decoded_input
-        X = np.zeros(self.dimensions * self.array_size) 
-
-        for a in self.accumulators.values():
-            # if there's a decoded input in this accumulator
+        X = np.zeros((self.array_size, self.dimensions))
+    
+        for a in self.accumulators.values(): 
             if hasattr(a, 'new_decoded_input'):
-
+                # if there's a decoded input in this accumulator,
                 # add its values to the total decoded input
-                X += a.new_decoded_input
-
-            # if there's an encoded input in this accumulator
+                X += a.new_decoded_input 
             if hasattr(a, 'new_encoded_input'):
-                
-                # encoded input is the same to every array network
-
+                # if there's an encoded input in this accumulator
                 # add its values directly to the input current
-                input_current += a.new_encoded_input 
-
-            # if there's a learn input in this accumulato
+                J += a.new_encoded_input 
             if hasattr(a, 'new_learn_input'):
-                # learn input is self.neurons_num * self.array_size,
-                # need to reshape
-                input_current += a.new_learn_input.reshape(
-                    (self.array_size, self.neurons_num))
+                # if there's a learn input in this accumulator
+                # add its values directly to the input current 
+                J += a.new_learn_input
 
         #TODO: optimize for when nothing is added to X
-        # (i.e., there are no decoded inputs)
+        # (ie there are no decoded inputs)
 
-        # reshape decoded input for network arrays
-        X = X.reshape((self.array_size, self.dimensions))
-        
-        ### find input current caused by decoded input signals
+        # find input current caused by decoded input signals,
+        # avoiding transposing our 3D matrix self.encoders
 
+        # The indexing here is improper, everything is added
+        # to ensemble 1 or to all of them, something is
+        # way off !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+        #print 'X.eval().shape', X.eval().shape
+        #print 'encoders.shape', self.encoders.shape
+        #print 'encoders[0].shape', self.encoders[0].shape
+        new_J = []
+        for index in range(self.array_size):
+            #print 'J[index]', J[index]
+            #print 'X[index].eval()', X[index].eval()
+            #print 'self.encoders[index]', self.encoders[index]
+            new_J.append(TT.dot(self.encoders[index], X[index].T) + J[index])
         # calculate input_current for each neuron
         # as represented input signal * preferred direction
-        input_current += TT.dot(X, self.encoders.T) 
+        J = new_J 
 
         # if noise has been specified for this neuron,
-        # add Gaussian white noise with variance
-        # self.noise to the input_current
-        if self.noise:
-            # generate random noise values, one for each
-            # input_current element, with standard deviation
-            #  = sqrt(self.noise=std**2).
-            
-            # When simulating white noise, the noise process
-            # must be scaled by sqrt(dt) instead of dt.
-            # Hence, we divide the std by sqrt(dt).
+        # add Gaussian white noise with variance self.noise to the input_current
+        if self.noise: 
+            # generate random noise values, one for each input_current element, 
+            # with standard deviation = sqrt(self.noise=std**2)
+            # When simulating white noise, the noise process must be scaled by
+            # sqrt(dt) instead of dt. Hence, we divide the std by sqrt(dt).
             if self.noise_type.lower() == 'gaussian':
-                input_current += self.srng.normal(
-                    size=input_current.shape,
-                    std=np.sqrt(self.noise/self.dt))
+                J += self.srng.normal(
+                    size=J.shape, std=np.sqrt(self.noise / self.dt))
             elif self.noise_type.lower() == 'uniform':
-                input_current += self.srng.uniform(
-                    size=input_current.shape,
-                    low=-self.noise/np.sqrt(self.dt),
-                    high=self.noise/np.sqrt(self.dt))
+                J += self.srng.uniform(
+                    size=J.shape, low=-self.noise / np.sqrt(self.dt),
+                    high=self.noise / np.sqrt(self.dt))
+        # pass that total into the neuron model to produce
+        # the main theano computation
 
-        # pass that total into the neuron model
-        # to produce the main theano computation
-
-        # updates is an ordered dictionary
-        # of theano internal variables to update
-        updates = self.neurons.update(input_current) 
-
-        for a in self.accumulators.values():
+        # updates is an ordered dictionary of theano variables to update
+        updates = self.neurons.update(J)
+        
+        for a in self.accumulators.values(): 
             # also update the filtered decoded and encoded
             # internal theano variables for the accumulators
             if hasattr(a, 'new_decoded_input'):
                 # if there's a decoded input in this accumulator,
-
-                # add accumulated decoded inputs to theano updates
-                updates[a.decoded_input] = a.new_decoded_input.astype(
-                    'float32')
+                #print 'a.new_decoded_input', a.new_decoded_input.eval()
+                # add accumulated decoded inputs to theano variable updates
+                updates[a.decoded_input] = a.new_decoded_input.astype('float32')
+                print 'after decoded update'
             if hasattr(a, 'new_encoded_input'):
                 # if there's an encoded input in this accumulator,
-
-                # add accumulated encoded inputs to theano updates
-                updates[a.encoded_input] = a.new_encoded_input.astype(
-                    'float32')
-
+                # add accumulated encoded inputs to theano variable updates
+                updates[a.encoded_input] = a.new_encoded_input.astype('float32')
             if hasattr(a, 'new_learn_input'):
                 # if there's a learn input in this accumulator,
-
-                # add accumulated learn inputs to theano updates
+                # add accumulated learn inputs to theano variable updates
                 updates[a.learn_input] = a.new_learn_input.astype('float32')
 
         for l in self.learned_terminations:

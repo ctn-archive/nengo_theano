@@ -20,9 +20,13 @@ class Probe(object):
         self.pstc = pstc
 
         target_value = np.zeros_like(target.get_value())
+        print target.get_value()
+        print 'target_value.shape:', target_value.shape
         self.data = np.zeros((self.buffer_size,) + target_value.shape)
-        self.filtered_data = (theano.shared(target_value)
-                              if self.pstc > 0 else None)
+
+        self.filtered_data = (
+            theano.shared(target_value, name='probe.filtered_data')
+            if self.pstc > 0 else None)
 
     def update(self):
         if self.filtered_data is not None:
