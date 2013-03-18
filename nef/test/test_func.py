@@ -9,8 +9,8 @@ from .. import nef_theano as nef
 
 net = nef.Network('Function Test')
 net.make_input('in', value=math.sin)
-net.make('A', neurons=500, dimensions=1)
-net.make('B', neurons=500, dimensions=3)
+net.make('A', neurons=250, dimensions=1)
+net.make('B', neurons=250, dimensions=3)
 
 # function example for testing
 def square(x):

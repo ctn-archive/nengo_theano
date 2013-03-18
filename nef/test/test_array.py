@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from .. import nef_theano as nef
 
-neurons = 10
+neurons = 40
 
 net = nef.Network('Array Test', seed=5)
 net.make_input('in', np.arange(-1, 1, .34), zero_after=1.0)
