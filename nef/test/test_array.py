@@ -10,7 +10,7 @@ from .. import nef_theano as nef
 
 neurons = 40
 
-net = nef.Network('Array Test', seed=5)
+net = nef.Network('Array Test', seed=50)
 #net.make_input('in', np.arange(-1, 1, .34), zero_after=1.0)
 net.make_input('in', value=1, zero_after=1.0)
 net.make_array('A', neurons=neurons, array_size=1, dimensions=6)

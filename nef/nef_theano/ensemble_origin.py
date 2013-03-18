@@ -62,18 +62,16 @@ class EnsembleOrigin(Origin):
                 eval_points.shape = [1, eval_points.shape[0]]
             self.num_samples = eval_points.shape[1]
 
-        # compute the target_values at the sampled points
-        # (which are the same as the sample points for the 'X' origin)
+        # compute the target_values at the sampled points 
         if func is None:
             # if no function provided, use identity function as default
-            target_values = eval_points
-
+            target_values = eval_points 
         else:
             # otherwise calculate target_values using provided function
             
             # scale all our sample points by ensemble radius,
             # calculate function value, then scale back to unit length
-            
+
             # this ensures that we accurately capture the shape of the
             # function when the radius is > 1 (think for example func=x**2)
             target_values = (np.array([func(s * self.ensemble.radius)
@@ -85,15 +83,8 @@ class EnsembleOrigin(Origin):
         
         # replicate attached population of neurons into array of ensembles,
         # one ensemble per sample point
-        # so in parallel we can calculate the activity
-        # of all of the neurons at each sample point 
-        neurons = self.ensemble.neurons.__class__(
-            size=(self.ensemble.neurons_num, self.num_samples), 
-            tau_rc=self.ensemble.neurons.tau_rc,
-            tau_ref=self.ensemble.neurons.tau_ref)
-
         # set up matrix to store decoders,
-        # should be (array_size x neurons_num x dim_func) 
+        # should be (array_size * neurons_num * dim_func) 
         decoders = np.zeros((self.ensemble.array_size,
                              self.ensemble.neurons_num,
                              target_values.shape[0]))
@@ -102,6 +93,13 @@ class EnsembleOrigin(Origin):
             # compute the input current for every neuron and every sample point
             J = np.dot(self.ensemble.encoders[index], eval_points)
             J += self.ensemble.bias[index][:, np.newaxis]
+
+            # so in parallel we can calculate the activity
+            # of all of the neurons at each sample point 
+            neurons = self.ensemble.neurons.__class__(
+                size=(self.ensemble.neurons_num, self.num_samples), 
+                tau_rc=self.ensemble.neurons.tau_rc,
+                tau_ref=self.ensemble.neurons.tau_ref)
 
             # run the neuron model for 1 second,
             # accumulating spikes to get a spike rate

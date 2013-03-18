@@ -302,7 +302,7 @@ class Network(object):
         # to specific post dimensions
 
         decoded_output = TT.dot(transform, decoded_output)
-        #print 'decoded_output: \n', decoded_output.eval()
+        print 'decoded_output: \n', decoded_output.eval()
         print
 
         # pass in the pre population decoded output function
