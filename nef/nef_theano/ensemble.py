@@ -50,7 +50,7 @@ class Accumulator:
 
         # the initial filtered encoded input 
         self.encoded_input = theano.shared(np.zeros(
-                (self.ensemble.array_size, self.ensemble.neurons_num)
+                (self.ensemble.neurons.size)
                 ).astype('float32'), name='accumulator.encoded_input')
         
         # learn_input specifies input into each neuron,
@@ -61,7 +61,7 @@ class Accumulator:
 
         # the initial filtered encoded input 
         self.learn_input = theano.shared(np.zeros(
-                (self.ensemble.array_size, self.ensemble.neurons_num)
+                (self.ensemble.neurons.size)
                 ).astype('float32'), name='accumulator.learn_input')
 
     def add_decoded_input(self, decoded_input):
@@ -427,12 +427,6 @@ class Ensemble:
         #TODO: optimize for when nothing is added to X
         # (ie there are no decoded inputs)
 
-        # find input current caused by decoded input signals,
-        # avoiding transposing our 3D matrix self.encoders
-
-        # The indexing here is improper, everything is added
-        # to ensemble 1 or to all of them, something is
-        # way off !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
         #print 'X.eval().shape', X.eval().shape
         #print 'encoders.shape', self.encoders.shape
         #print 'encoders[0].shape', self.encoders[0].shape

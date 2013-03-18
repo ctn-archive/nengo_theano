@@ -21,7 +21,7 @@ class EnsembleOrigin(Origin):
         
         """
         self.ensemble = ensemble
-        self.decoder = self.compute_decoder(func, eval_points)
+        self.decoders = self.compute_decoders(func, eval_points)
         # decoders is array * neurons * dimensions,
         # initial value should have dimensions * array_size values
         initial_value = np.zeros(
@@ -35,7 +35,7 @@ class EnsembleOrigin(Origin):
         of each of the neurons in the attached population
         such that the weighted summation of their output
         generates the desired decoded output.
-        
+
         Decoder values computed as D = (A'A)^-1 A'X_f
         where A is the matrix of activity values of each 
         neuron over sampled X values, and X_f is the vector
@@ -92,10 +92,11 @@ class EnsembleOrigin(Origin):
             tau_rc=self.ensemble.neurons.tau_rc,
             tau_ref=self.ensemble.neurons.tau_ref)
 
-        # set up matrix to store decoders       
+        # set up matrix to store decoders,
+        # should be (array_size * neurons_num * dim_func) 
         decoders = np.zeros((self.ensemble.array_size,
                              self.ensemble.neurons_num,
-                             self.ensemble.dimensions))
+                             target_values.shape[0]))
 
         for index in range(self.ensemble.array_size): 
 
@@ -140,7 +141,11 @@ class EnsembleOrigin(Origin):
             #Ginv=np.linalg.pinv(G, rcond=.01)  
             
             # compute decoders - least squares method 
+            print 'decoder set.shape', (
+                np.dot(Ginv, U) / (self.ensemble.neurons.dt)).shape
+            print 'decoders[index].shape', decoders[index].shape 
             decoders[index] = np.dot(Ginv, U) / (self.ensemble.neurons.dt)
+
         #print decoders
         return decoders.astype('float32')
 
