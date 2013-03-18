@@ -373,7 +373,6 @@ class Ensemble:
             set of possible preferred directions of neurons
 
         """
-
         if encoders is None:
             # if no encoders specified, generate randomly
             encoders = self.srng.normal(
@@ -384,9 +383,10 @@ class Ensemble:
             # repeat array until 'encoders' is the same length
             # as number of neurons in population
             encoders = np.tile(encoders,
-                (self.array_size, self.neurons_num / len(encoders) + 1)
-                )[:, :self.neurons_num, :self.dimensions]
-           
+                (self.neurons_num / len(encoders) + 1)
+                               )[:self.neurons_num, :self.dimensions]
+            encoders = np.tile(encoders, (self.array_size, 1, 1))
+
         # normalize encoders across represented dimensions 
         norm = TT.sum(encoders * encoders, axis=[1], keepdims=True)
         encoders = encoders / TT.sqrt(norm)        
@@ -400,12 +400,12 @@ class Ensemble:
         termination, and origin values.
         
         """
-
         ### find the total input current to this population of neurons
 
         # apply respective biases to neurons in the population 
         J = np.array(self.bias)
 
+        print 'self.bias', self.bias
         # set up matrix to store accumulated decoded input,
         # same size as decoded_input
         X = np.zeros((self.array_size, self.dimensions))
