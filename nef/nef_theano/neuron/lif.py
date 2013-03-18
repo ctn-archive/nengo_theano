@@ -73,8 +73,7 @@ class LIFNeuron(Neuron):
         dV = self.dt / self.tau_rc * (J - self.voltage)
 
         # increase the voltage, ignore values below 0
-        v = TT.maximum(self.voltage + dV, 0)
-        print 'v.eval().shape', v.eval().shape
+        v = TT.maximum(self.voltage + dV, 0)  
         
         # handle refractory period        
         post_ref = 1.0 - (self.refractory_time - self.dt) / self.dt

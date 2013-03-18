@@ -388,7 +388,7 @@ class Ensemble:
             encoders = np.tile(encoders, (self.array_size, 1, 1))
 
         # normalize encoders across represented dimensions 
-        norm = TT.sum(encoders * encoders, axis=[1], keepdims=True)
+        norm = TT.sum(encoders * encoders, axis=[2], keepdims=True)
         encoders = encoders / TT.sqrt(norm)        
 
         return theano.function([], encoders)()
@@ -430,7 +430,9 @@ class Ensemble:
         # avoiding transposing our 3D matrix self.encoders
         
         # add to input current for each neuron as
-        # represented input signal * preferred direction
+        # represented input signal x preferred direction
+        print 'J[0].shape', (
+            J[0] + TT.dot(self.encoders[0], X[0].T).eval()).shape
         J = [J[i] + TT.dot(self.encoders[i], X[i].T)
              for i in range(self.array_size)]
 
