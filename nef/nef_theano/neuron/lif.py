@@ -58,7 +58,7 @@ class LIFNeuron(Neuron):
 
         self.voltage.set_value(np.zeros(self.size).astype('float32'))
         self.refractory_time.set_value(np.zeros(self.size).astype('float32'))
-<<<<<<< HEAD
+
     def update(self, J):
         """Theano update rule that implementing LIF rate neuron type
         Returns dictionary with voltage levels, refractory periods,
@@ -74,19 +74,23 @@ class LIFNeuron(Neuron):
 
         # increase the voltage, ignore values below 0
         v = TT.maximum(self.voltage + dV, 0)
-
-        # handle refractory period
+        print 'v.eval().shape', v.eval().shape
+        
+        # handle refractory period        
         post_ref = 1.0 - (self.refractory_time - self.dt) / self.dt
 
         # set any post_ref elements < 0 = 0, and > 1 = 1
         v *= TT.clip(post_ref, 0, 1)
-
-        # determine which neurons spike;
+        
+        # determine which neurons spike
         # if v > 1 set spiked = 1, else 0
         spiked = TT.switch(v > 1, 1.0, 0.0)
+        
+        # adjust refractory time (neurons that spike get
+        # a new refractory time set, all others get it reduced by dt)
 
         # linearly approximate time since neuron crossed spike threshold
-        overshoot = (v - 1) / dV
+        overshoot = (v - 1) / dV 
         spiketime = self.dt * (1.0 - overshoot)
 
         # adjust refractory time (neurons that spike get a new
