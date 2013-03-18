@@ -56,7 +56,7 @@ class Network(object):
         self.tick_nodes.append(node)
         self.nodes[node.name] = node
 
-    def compute_transform(self, dim_pre, dim_post, weight=1,
+    def compute_transform(self, dim_pre, dim_post, array_size, weight=1,
                           index_pre=None, index_post=None):
         """Helper function used by :func:`nef.Network.connect()` to create
         the `dim_post` by `dim_pre` transform matrix.
@@ -68,6 +68,7 @@ class Network(object):
 
         :param int dim_pre: first dimension of transform matrix
         :param int dim_post: second dimension of transform matrix
+        :param int array_size: size of the network array
         :param float weight: the non-zero value to put into the matrix
         :param index_pre: the indexes of the pre-synaptic dimensions to use
         :type index_pre: list of integers or a single integer
@@ -81,19 +82,19 @@ class Network(object):
         """
 
         # create a matrix of zeros
-        transform = [[0] * dim_pre for i in range(dim_post)]
+        transform = [[0] * dim_pre for i in range(dim_post * array_size)]
 
         # default index_pre/post lists set up *weight* value
         # on diagonal of transform
-
-        # if dim_post != dim_pre, then values wrap around when edge hit
+        
+        # if dim_post * array_size != dim_pre,
+        # then values wrap around when edge hit
         if index_pre is None:
             index_pre = range(dim_pre) 
         elif isinstance(index_pre, int):
             index_pre = [index_pre] 
-
         if index_post is None:
-            index_post = range(dim_post) 
+            index_post = range(dim_post * array_size) 
         elif isinstance(index_post, int):
             index_post = [index_post]
 
@@ -102,7 +103,17 @@ class Network(object):
             post = index_post[i % len(index_post)]
             transform[post][pre] = weight
 
-        return transform
+        #reformulate to account for post.array_size
+        array_transform = [[[0] * dim_pre for i in range(dim_post)]
+                           for j in range(array_size)]
+
+        for i in range(array_size):
+            for j in range(dim_post):
+                array_transform[i][j] = transform[i * dim_post + j]
+
+        print 'transform: ', array_transform
+        print 
+        return array_transform
         
     def connect(self, pre, post, transform=None, weight=1,
                 index_pre=None, index_post=None, pstc=0.01, func=None):
@@ -191,9 +202,11 @@ class Network(object):
         self.theano_tick = None  
     
         # check to see if there is a transform
+
         # if there is, and its [0] dimension is post.neurons_num
         # or post.neurons_num * post.array_size then assume
         # encoded connection
+
         # otherwise it's a decoded connection
      
         if transform is not None: 
@@ -212,16 +225,15 @@ class Network(object):
                 # is quicker when network array w same projection
                 # to each ensemble
                 # just have to make sure that encoded output
-                # ends up being (post.neurons_num x post.array_size)
-                #if transform.shape[0] == post.neurons_num: 
-                #    transform = np.vstack([transform]*post.array_size)
-                # assert (transform.shape[0]
-                #         == post.neurons_num * post.array_size)
+                # ends up being (post.array_size x post.neurons_num)
+                if transform.shape[0] == post.neurons_num: 
+                    transform = np.array([transform] * post.array_size)
+                print 'transform.shape:',transform.shape
+                assert transform.shape == (post.array_size, post.neurons_num)
 
                 # can't specify a function with an encoded connection
-                assert func == None
-                
-                # also can't get encoded output from Inputs or SimpleNodes
+                assert func == None 
+                # also can't get encoded output from Input or SimpleNode objects
                 assert (not (isinstance(pre, input.Input)
                              or isinstance(pre, simplenode.SimpleNode)))
 
@@ -280,14 +292,18 @@ class Network(object):
             # compute transform matrix if not given
             transform = self.compute_transform(
                 dim_pre=dim_pre,
-                dim_post=post.dimensions * post.array_size, 
+                dim_post=post.dimensions,
+                array_size=post.array_size,
                 weight=weight,
                 index_pre=index_pre,
                 index_post=index_post)
 
         # apply transform matrix, directing pre dimensions
         # to specific post dimensions
+
         decoded_output = TT.dot(transform, decoded_output)
+        #print 'decoded_output: \n', decoded_output.eval()
+        print
 
         # pass in the pre population decoded output function
         # to the post population, connecting them for theano
@@ -349,10 +365,10 @@ class Network(object):
             # if no seed provided, get one randomly from the rng
             kwargs['seed'] = self.random.randrange(0x7fffffff)
 
-            # just in case the model has been run previously,
-            # as adding a new node means we have to rebuild
-            # the theano function
+        # just in case the model has been run previously,
+        # as adding a new node means we have to rebuild the theano function
         self.theano_tick = None
+
         e = ensemble.Ensemble(*args, **kwargs) 
 
         # store created ensemble in node dictionary
@@ -415,15 +431,8 @@ class Network(object):
         # and the theano description of how to compute them 
         updates = collections.OrderedDict()
 
-        # for every node in the network
-        for node in self.nodes.values():
-            # if there is some variable to update
-            if hasattr(node, 'update'):
-                # add it to the list of variables to update every time step
-                updates.update(node.update())
-
         # for debugging
-        theano.config.compute_test_value = 'warn'
+        theano.config.compute_test_value = 'raise'
 
         # create graph and return optimized update function
         return theano.function([], [], updates=updates)

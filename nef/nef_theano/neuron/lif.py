@@ -20,9 +20,13 @@ class LIFNeuron(Neuron):
         self.tau_rc = tau_rc
         self.tau_ref  = tau_ref
 
+        print 'neurons size: ', size
+
         # internal variables
-        self.voltage = theano.shared(np.zeros(size).astype('float32'))
-        self.refractory_time = theano.shared(np.zeros(size).astype('float32'))
+        self.voltage = theano.shared(np.zeros(size).astype('float32'),
+                                     name='lif.voltage')
+        self.refractory_time = theano.shared(np.zeros(size).astype('float32'),
+                                             name='lif.refractory_time')
 
     #  TODO: make this generic so it can be applied to any neuron model
     #(by running the neurons and finding their response function),
@@ -51,21 +55,22 @@ class LIFNeuron(Neuron):
     def reset(self):
         """Resets the state of the neuron."""
         Neuron.reset(self)
+
         self.voltage.set_value(np.zeros(self.size).astype('float32'))
         self.refractory_time.set_value(np.zeros(self.size).astype('float32'))
-
-    def update(self, input_current):
+<<<<<<< HEAD
+    def update(self, J):
         """Theano update rule that implementing LIF rate neuron type
         Returns dictionary with voltage levels, refractory periods,
         and instantaneous spike raster of neurons.
 
-        :param float array input_current:
+        :param float array J:
             the input current for the current time step
 
         """
 
         # Euler's method
-        dV = self.dt / self.tau_rc * (input_current - self.voltage)
+        dV = self.dt / self.tau_rc * (J - self.voltage)
 
         # increase the voltage, ignore values below 0
         v = TT.maximum(self.voltage + dV, 0)
@@ -83,7 +88,7 @@ class LIFNeuron(Neuron):
         # linearly approximate time since neuron crossed spike threshold
         overshoot = (v - 1) / dV
         spiketime = self.dt * (1.0 - overshoot)
-        
+
         # adjust refractory time (neurons that spike get a new
         # refractory time set, all others get it reduced by dt)
         new_refractory_time = TT.switch(

@@ -22,8 +22,10 @@ class EnsembleOrigin(Origin):
         """
         self.ensemble = ensemble
         self.decoder = self.compute_decoder(func, eval_points)
+        # decoders is array * neurons * dimensions,
+        # initial value should have dimensions * array_size values
         initial_value = np.zeros(
-            self.decoder.shape[1] * self.ensemble.array_size)
+            self.decoders.shape[0] * self.decoders.shape[2]) 
         Origin.__init__(self, func=func, initial_value=initial_value)
     
     def compute_decoder(self, func, eval_points=None):     
@@ -81,57 +83,66 @@ class EnsembleOrigin(Origin):
                 target_values.shape = target_values.shape[0], 1
             target_values = target_values.T
         
-        # compute the input current for every neuron and every sample point
-        J = np.dot(self.ensemble.encoders, eval_points)
-        J += np.array([self.ensemble.bias]).T
-        
-        # duplicate attached population of neurons into
-        # array of ensembles, one ensemble per sample point,
-        # so in parallel we can calculate the activity of
-        # all of the neurons at each sample point 
-        neurons = self.ensemble.neurons.__class__((
-                self.ensemble.neurons_num, self.num_samples
-                ), tau_rc=self.ensemble.neurons.tau_rc,
-                tau_ref=self.ensemble.neurons.tau_ref)
-        
-        # run the neuron model for 1 second, accumulating spikes
-        # to get a spike rate
-        #TODO: is this long enough? Should it be less?
-        # If we do less, we may get a good noise approximation!
-        A = neuron.accumulate(J, neurons)
-        
-        # compute Gamma and Upsilon
-        G = np.dot(A, A.T)
-        U = np.dot(A, target_values.T)
-        
-        #TODO: optimize this so we're not doing the full
-        # eigenvalue decomposition
-        #TODO: add NxS method for large N?
-        #TODO: compare below with pinv rcond
+        # replicate attached population of neurons into array of ensembles,
+        # one ensemble per sample point
+        # so in parallel we can calculate the activity
+        # of all of the neurons at each sample point 
+        neurons = self.ensemble.neurons.__class__(
+            size=(self.ensemble.neurons_num, self.num_samples),
+            tau_rc=self.ensemble.neurons.tau_rc,
+            tau_ref=self.ensemble.neurons.tau_ref)
 
-        # eigh for symmetric matrices, returns evalues w,
-        # and normalized evectors v
-        w, v = np.linalg.eigh(G)
+        # set up matrix to store decoders       
+        decoders = np.zeros((self.ensemble.array_size,
+                             self.ensemble.neurons_num,
+                             self.ensemble.dimensions))
 
-        # formerly 0.1 * 0.1 * max(w), set threshold
-        limit = .01 * max(w) 
-        for i in range(len(w)):
-            if w[i] < limit:
-                # if < limit set eval = 0
-                w[i] = 0 
-            else:
-                # prep for upcoming Ginv calculation
-                w[i] = 1.0 / w[i] 
+        for index in range(self.ensemble.array_size): 
 
-        # w[:, np.core.newaxis] gives transpose of vector,
-        # np.multiply is very fast element-wise multiplication
-        Ginv = np.dot(v, np.multiply(w[:, np.core.newaxis], v.T)) 
-        
-        #Ginv=np.linalg.pinv(G, rcond=.01)  
-        
-        # compute decoder - least squares method 
-        decoder = np.dot(Ginv, U) / (self.ensemble.neurons.dt)
-        return decoder.astype('float32')
+            # compute the input current for every neuron and every sample point
+            #print 'self.ensemble.encoders.shape', self.ensemble.encoders.shape
+            #print 'eval_points.shape', eval_points.shape
+            J = np.dot(self.ensemble.encoders[index], eval_points)
+            J += self.ensemble.bias[index][:, np.newaxis]
+
+            # run the neuron model for 1 second,
+            # accumulating spikes to get a spike rate
+            #TODO: is this long enough? Should it be less?
+            # If we do less, we may get a good noise approximation!
+            A = neuron.accumulate(J, neurons)
+
+            # compute Gamma and Upsilon
+            G = np.dot(A, A.T) # correlation matrix
+            U = np.dot(A, target_values.T)
+            
+            #TODO: optimize this so we're not doing
+            # the full eigenvalue decomposition
+            #TODO: add NxS method for large N?
+            #TODO: compare below with pinv rcond
+
+            # eigh for symmetric matrices, returns
+            # evalues w and normalized evectors v
+            w, v = np.linalg.eigh(G)
+
+            # formerly 0.1 * 0.1 * max(w), set threshold
+            limit = .01 * max(w) 
+            for i in range(len(w)):
+                if w[i] < limit:
+                    # if < limit set eval = 0
+                    w[i] = 0
+                else:
+                    # prep for upcoming Ginv calculation
+                    w[i] = 1.0 / w[i]
+            # w[:, np.newaxis] gives transpose of vector,
+            # np.multiply is very fast element-wise multiplication
+            Ginv = np.dot(v, np.multiply(w[:, np.newaxis], v.T)) 
+            
+            #Ginv=np.linalg.pinv(G, rcond=.01)  
+            
+            # compute decoders - least squares method 
+            decoders[index] = np.dot(Ginv, U) / (self.ensemble.neurons.dt)
+        #print decoders
+        return decoders.astype('float32')
 
     def make_samples(self):
         """Generate sample points uniformly distributed within the sphere.
@@ -168,11 +179,17 @@ class EnsembleOrigin(Origin):
 
         """
 
-        output = TT.mul(TT.unbroadcast(
-                TT.dot(spikes,self.decoder).reshape(
-                    [self.dimensions]), 0), self.ensemble.radius
-                        ).astype('float32')
-        
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range
-        return collections.OrderedDict({self.decoded_output: output}) 
+
+        #np.zeros(self.ensemble.dimensions * self.ensemble.array_size)
+        decoded_output = np.array([])
+        for i in range(self.ensemble.array_size):
+            #print 'decoders[i]:', self.decoders[i]
+            #print 'spikes[i]:', spikes[i].eval()
+            a = TT.dot(spikes[i], self.decoders[i])
+            decoded_output = TT.concatenate([decoded_output, a])
+        decoded_output = TT.mul(
+            decoded_output, self.ensemble.radius).astype('float32')
+        #print 'decoded_output here: ', decoded_output.eval()
+        return collections.OrderedDict({self.decoded_output: decoded_output})

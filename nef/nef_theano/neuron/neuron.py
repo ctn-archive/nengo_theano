@@ -19,6 +19,9 @@ def accumulate(input, neuron, time=1.0, init_time=0.05):
                             to get rid of startup transients (s)
 
     """
+
+    print 'total.shape', neuron.size
+
     # create internal state variable to keep track of number of spikes
     total = theano.shared(np.zeros(neuron.size).astype('float32'))
 
@@ -63,6 +66,7 @@ class Neuron(object):
         """
         self.size = size
         self.dt = dt
+
         # set up theano internal state variable
         self.output = theano.shared(np.zeros(size).astype('float32'))
 

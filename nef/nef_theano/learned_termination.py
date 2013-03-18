@@ -94,12 +94,12 @@ class hPESTermination(LearnedTermination):
 
         # Trevor's assumption: high gain -> high theta
         self.initial_theta *= self.gains
-        self.theta = theano.shared(self.initial_theta, name='theta')
+        self.theta = theano.shared(self.initial_theta, name='hPES.theta')
 
         self.pre_filtered = theano.shared(
-            self.pre_spikes.get_value().flatten(), name='pre_filtered')
+            self.pre_spikes.get_value().flatten(), name='hPES.pre_filtered')
         self.post_filtered = theano.shared(
-            self.post_spikes.get_value().flatten(), name='post_filtered')
+            self.post_spikes.get_value().flatten(), name='hPES.post_filtered')
 
     def reset(self):
         super(hPESTermination, self).reset()
