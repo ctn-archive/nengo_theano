@@ -223,31 +223,67 @@ class Network(object):
                 # just have to make sure that encoded output ends up being
                 # (post.array_size * post.neurons_num * post.dimensions)
                 if transform.shape[0] == post.neurons_num: 
-                    print 'transform.shape', transform.shape
-                    transform = np.tile(np.array([transform]),
-                                        (post.array_size, 1, 1))
-                    print 'transform.shape', transform.shape
-                assert transform.shape == (
-                    post.array_size, post.neurons_num, post.dimensions)
+                    transform = np.tile(np.array(transform).T,
+                                        (post.array_size, 1))
+                print 'transform.shape', transform.shape
+                print 'post.array_size', post.array_size
+                assert transform.shape == (post.array_size, post.neurons_num)
                 # can't specify a function with an encoded connection
-                assert func == None 
-                # also can't get encoded output from Input or SimpleNode objects
-                assert (not (isinstance(pre, input.Input)
-                             or isinstance(pre, simplenode.SimpleNode)))
+                assert func == None
 
-                # get the instantaneous spike raster from the pre population
-                neuron_output = pre.neurons.output
-                
+                # check to see if the pre side is encoded or decoded
+                if transform.shape[1] != pre.dimensions: 
+                    # for pre = encoded * post = encoded
+                    # can't get encoded output from Input or SimpleNode objects
+                    assert (not (isinstance(pre, input.Input)
+                                 or isinstance(pre, simplenode.SimpleNode)))
+
+                    # get the instantaneous spike raster from the pre population
+                    pre_output = pre.neurons.output
+                    #print 'e_o.eval().shape', encoded_output.eval().shape
+                else: 
+                    # for pre = decoded x post = encoded
+
+                    # make sure transform is right size
+                    assert transform.shape[1] == pre.dimensions
+                    #TODO: merge this and the code below
+                    if not isinstance(pre, origin.Origin):
+                        # see if pre is the origin we want to connect to or not
+
+                        # if pre is not an origin,
+                        # find the origin the projection originates from
+
+                        # take default identity decoded output from pre pop
+                        origin_name = 'X'
+                        if func is not None:
+                            # if we're supposed to compute a function on
+                            # this connection create an origin to do it
+
+                            # set name as the function being calculated
+                            origin_name = func.__name__
+                            #TODO: better analysis to see if we need to
+                            # build a new origin (rather than just relying
+                            # on the name)
+                            if origin_name not in pre.origin:
+                                # if an origin for this function
+                                # hasn't already been created
+
+                                # create origin with to perform desired func
+                                pre.add_origin(origin_name, func)
+                        pre = pre.origin[origin_name]
+                    pre_output = pre.decoded_output
+                    
+                print 'transform.shape', transform.shape
+                print 'pre_output.shape', pre_output.eval().shape
+                print 'pre_output.type', pre_output.type
+                print 'encoded_output',
+                print TT.mul(transform, pre_output).eval().shape
                 # the encoded input to the next population is
-                # the spikes * weight matrix
-                # dot product is opposite order than for decoded_output
-                # because of neurons.output shape
-                encoded_output = TT.dot(neuron_output, transform)
-                
+                # the transform * pre_output
+                encoded_output = TT.mul(transform, pre_output)
                 # pass in the pre population encoded output function
                 # to the post population, connecting them for theano
-                post.add_filtered_input(pstc=pstc,
-                                        encoded_input=encoded_output)
+                post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
                 return
         
         # if we're doing a decoded connection 
@@ -299,6 +335,10 @@ class Network(object):
         # apply transform matrix, directing pre dimensions
         # to specific post dimensions
 
+        print 'transform,', transform
+
+        # apply transform matrix, directing pre dimensions
+        # to specific post dimensions
         decoded_output = TT.dot(transform, decoded_output)
         print 'd_o.type:', decoded_output.type
         print 'decoded_output: \n', decoded_output.eval()
