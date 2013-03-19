@@ -25,41 +25,29 @@ class Accumulator:
         self.ensemble = ensemble
 
         # time constant for filter
-        self.decay = np.exp(-self.ensemble.neurons.dt / pstc)
-        # the theano object representing the sum
-        # of the decoded inputs to this filter
+        self.decay = np.exp(-self.ensemble.neurons.dt / pstc) 
         self.decoded_total = None
-        # the theano object representing the sum
-        # of the encoded inputs to this filter
         self.encoded_total = None
-        # the theano object representing the sum
-        # of the learned inputs to this filter
-        self.learn_total = None 
+        self.learn_total = None
 
         # decoded_input should be dimensions * array_size
         # because we account for the transform matrix here,
         # so different array networks get different input
-
-        # the initial filtered decoded input 
         self.decoded_input = theano.shared(np.zeros(
                 (self.ensemble.array_size, self.ensemble.dimensions)
                 ).astype('float32'), name='accumulator.decoded_input')
-
         # encoded_input specifies input into each neuron,
         # so it is array_size * neurons_num
-
-        # the initial filtered encoded input 
+        print 'encoded input will be of size', self.ensemble.neurons.size
+        print 'self.ensemble.array_size', self.ensemble.array_size
         self.encoded_input = theano.shared(np.zeros(
-                (self.ensemble.neurons.size)
+                (self.ensemble.array_size, self.ensemble.neurons_num)
                 ).astype('float32'), name='accumulator.encoded_input')
-        
         # learn_input specifies input into each neuron,
         # but current from different terminations can't be amalgamated
-        #TODO: make learn input a dictionary that stores
-        # a shared variable of the input current for each different
-        # termination, for use by learned_termination
-
-        # the initial filtered encoded input 
+        #TODO: make learn input a dictionary that stores a
+        # shared variable of the input current for
+        # each different termination, for use by learned_termination
         self.learn_input = theano.shared(np.zeros(
                 (self.ensemble.neurons.size)
                 ).astype('float32'), name='accumulator.learn_input')
@@ -134,6 +122,14 @@ class Accumulator:
             neuron of the pre population * a connection weight matrix
 
         """
+
+        print 'self.encoded_input.eval().shape',
+        print self.encoded_input.eval().shape
+        print 'self.encoded_total.eval().shape',
+        print self.encoded_total.eval().shape
+        self.new_encoded_input = self.decay * self.encoded_input + (
+            1 - self.decay) * self.encoded_total
+        
         if self.learn_total is None:
             # initialize internal value
             # storing learned encoded input (current) to neurons
@@ -285,6 +281,7 @@ class Ensemble:
         # make sure there's an accumulator for given pstc
         if pstc not in self.accumulators:
             self.accumulators[pstc] = Accumulator(self, pstc)
+            print 'self.array_size', self.array_size
 
         # add this termination's contribution to
         # the set of terminations with the same pstc
@@ -422,6 +419,7 @@ class Ensemble:
         
         # add to input current for each neuron as
         # represented input signal x preferred direction
+        #TODO: use TT.batched_dot function here instead?
         J = [J[i] + TT.dot(self.encoders[i], X[i].T)
              for i in range(self.array_size)]
 
