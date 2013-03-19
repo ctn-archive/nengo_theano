@@ -13,7 +13,7 @@ from . import input
 from . import subnetwork
 
 class Network(object):
-    def __init__(self, name, seed=None):
+    def __init__(self, name, seed=None, fixed_seed=None):
         """Wraps an NEF network with a set of helper functions
         for simplifying the creation of NEF models.
 
@@ -30,6 +30,7 @@ class Network(object):
         self.dt = 0.001
         self.run_time = 0.0    
         self.seed = seed
+        self.fixed_seed = fixed_seed
         # all the nodes in the network, indexed by name
         self.nodes = {}
         # the function call to run the theano portions of the model
@@ -365,11 +366,15 @@ class Network(object):
 
         """
         if 'seed' not in kwargs.keys():
-            # if no seed provided, get one randomly from the rng
-            kwargs['seed'] = self.random.randrange(0x7fffffff)
+            if self.fixed_seed is not None:
+                kwargs['seed'] = self.fixed_seed
+            else:
+                # if no seed provided, get one randomly from the rng
+                kwargs['seed'] = self.random.randrange(0x7fffffff)
 
         # just in case the model has been run previously,
-        # as adding a new node means we have to rebuild the theano function
+        # as adding a new node means we have to rebuild
+        # the theano function
         self.theano_tick = None
 
         e = ensemble.Ensemble(*args, **kwargs) 
