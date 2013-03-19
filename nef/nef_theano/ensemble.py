@@ -439,11 +439,12 @@ class Ensemble:
             # sqrt(dt) instead of dt. Hence, we divide the std by sqrt(dt).
             if self.noise_type.lower() == 'gaussian':
                 J += self.srng.normal(
-                    size=J.shape, std=np.sqrt(self.noise / self.dt))
+                    size=self.bias.shape, std=np.sqrt(self.noise/self.dt))
             elif self.noise_type.lower() == 'uniform':
                 J += self.srng.uniform(
-                    size=J.shape, low=-self.noise / np.sqrt(self.dt),
-                    high=self.noise / np.sqrt(self.dt))
+                    size=self.bias.shape, 
+                    low=-self.noise/np.sqrt(self.dt), 
+                    high=self.noise/np.sqrt(self.dt))
         # pass that total into the neuron model to produce
         # the main theano computation
 
