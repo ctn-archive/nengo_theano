@@ -26,7 +26,7 @@ net.make('B2', neurons=neurons, dimensions=dimensions, array_size=array_size) # 
 #net.make('B3', neurons=neurons, dimensions=dimensions) # for test 3
 
 # setup inhibitory scaling matrix
-inhib_matrix = [[-10] * dimensions] * neurons 
+inhib_matrix = [[[-10] * dimensions] * neurons] * array_size
 
 # define our transform and connect up! 
 net.connect('in1', 'A')
