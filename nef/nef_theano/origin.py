@@ -29,7 +29,6 @@ class Origin(object):
         initial_value = numpy.float32(initial_value)
 
         # theano internal state defining output value
-        print 'initial_value:', initial_value.shape
         self.decoded_output = theano.shared(initial_value,
                                             name='origin.decoded_output') 
 
