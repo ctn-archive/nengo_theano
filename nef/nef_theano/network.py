@@ -10,6 +10,7 @@ from . import simplenode
 from . import probe
 from . import origin
 from . import input
+from . import subnetwork
 
 class Network(object):
     def __init__(self, name, seed=None):
@@ -373,6 +374,17 @@ class Network(object):
         i = input.Input(*args, **kwargs)
         self.add(i)
         return i
+        
+    def make_subnetwork(self, name):
+        """Create a subnetwork.  This has no functional purpose other than
+        to help organize the model.  Components within a subnetwork can
+        be accessed through a dotted name convention, so an element B inside
+        a subnetwork A can be referred to as A.B.       
+        
+        :param name: the name of the subnetwork to create        
+        """
+        return subnetwork.SubNetwork(name, self)
+            
 
     def make_probe(self, target, name=None, dt_sample=0.01, **kwargs):
         """Add a probe to measure the given target.
