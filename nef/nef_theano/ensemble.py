@@ -25,7 +25,7 @@ class Accumulator:
         self.ensemble = ensemble
 
         # time constant for filter
-        self.decay = np.exp(-self.ensemble.neurons.dt / pstc) 
+        self.decay = np.exp(-self.ensemble.neurons.dt / pstc)
         self.decoded_total = None
         self.encoded_total = None
         self.learn_total = None
@@ -38,15 +38,13 @@ class Accumulator:
                 ).astype('float32'), name='accumulator.decoded_input')
         # encoded_input specifies input into each neuron,
         # so it is array_size * neurons_num
-        print 'encoded input will be of size', self.ensemble.neurons.size
-        print 'self.ensemble.array_size', self.ensemble.array_size
         self.encoded_input = theano.shared(np.zeros(
                 (self.ensemble.array_size, self.ensemble.neurons_num)
                 ).astype('float32'), name='accumulator.encoded_input')
         # learn_input specifies input into each neuron,
         # but current from different terminations can't be amalgamated
         #TODO: make learn input a dictionary that stores a
-        # shared variable of the input current for
+        # shared variable of the input current
         # each different termination, for use by learned_termination
         self.learn_input = theano.shared(np.zeros(
                 (self.ensemble.neurons.size)
@@ -123,13 +121,6 @@ class Accumulator:
 
         """
 
-        print 'self.encoded_input.eval().shape',
-        print self.encoded_input.eval().shape
-        print 'self.encoded_total.eval().shape',
-        print self.encoded_total.eval().shape
-        self.new_encoded_input = self.decay * self.encoded_input + (
-            1 - self.decay) * self.encoded_total
-        
         if self.learn_total is None:
             # initialize internal value
             # storing learned encoded input (current) to neurons
@@ -281,7 +272,6 @@ class Ensemble:
         # make sure there's an accumulator for given pstc
         if pstc not in self.accumulators:
             self.accumulators[pstc] = Accumulator(self, pstc)
-            print 'self.array_size', self.array_size
 
         # add this termination's contribution to
         # the set of terminations with the same pstc

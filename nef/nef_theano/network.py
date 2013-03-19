@@ -187,141 +187,101 @@ class Network(object):
             instead of creating a new one.
 
         """
+        # reset timer in case the model has been run,
+        # as adding a new node requires rebuilding the theano function 
+        self.theano_tick = None  
+
+        # get post Node object from node dictionary
+        post = self.get_object(post)
 
         # get pre Node object from node dictionary
         pre = self.get_object(pre)
 
-        # get post Node object from node dictionary
-        post = self.get_object(post)
-      
-        # reset timer in case the model has been run previously,
-        # as adding a new node means we have to rebuild the theano function 
-        self.theano_tick = None  
-    
-        # check to see if there is a transform
-
-        # if there is, and its [0] dimension is post.neurons_num
-        # or post.neurons_num * post.array_size then assume
-        # encoded connection
-
-        # otherwise it's a decoded connection
-     
-        if transform is not None: 
-            # make sure contradicting things aren't simultaneously specified
-            assert ((weight == 1) and (index_pre is None)
-                    and (index_post is None))
-
-            transform = np.array(transform)
-            
-            # check to see if it's an encoded connection
-            if transform.shape[0] != post.dimensions:
-                #TODO: optimization: move this transform hstack
-                # instead to a theano TT function on encoded_output =
-                # instead so the dot product for encoded output
-                # is quicker when network array w same projection
-                # to each ensemble
-                # just have to make sure that encoded output ends up being
-                # (post.array_size * post.neurons_num * post.dimensions)
-                if transform.shape[0] == post.neurons_num: 
-                    transform = np.tile(np.array(transform).T,
-                                        (post.array_size, 1))
-                print 'transform.shape', transform.shape
-                print 'post.array_size', post.array_size
-                assert transform.shape == (post.array_size, post.neurons_num)
-                # can't specify a function with an encoded connection
-                assert func == None
-
-                # check to see if the pre side is encoded or decoded
-                if transform.shape[1] != pre.dimensions: 
-                    # for pre = encoded * post = encoded
-                    # can't get encoded output from Input or SimpleNode objects
-                    assert (not (isinstance(pre, input.Input)
-                                 or isinstance(pre, simplenode.SimpleNode)))
-
-                    # get the instantaneous spike raster from the pre population
-                    pre_output = pre.neurons.output
-                    #print 'e_o.eval().shape', encoded_output.eval().shape
-                else: 
-                    # for pre = decoded x post = encoded
-
-                    # make sure transform is right size
-                    assert transform.shape[1] == pre.dimensions
-                    #TODO: merge this and the code below
-                    if not isinstance(pre, origin.Origin):
-                        # see if pre is the origin we want to connect to or not
-
-                        # if pre is not an origin,
-                        # find the origin the projection originates from
-
-                        # take default identity decoded output from pre pop
-                        origin_name = 'X'
-                        if func is not None:
-                            # if we're supposed to compute a function on
-                            # this connection create an origin to do it
-
-                            # set name as the function being calculated
-                            origin_name = func.__name__
-                            #TODO: better analysis to see if we need to
-                            # build a new origin (rather than just relying
-                            # on the name)
-                            if origin_name not in pre.origin:
-                                # if an origin for this function
-                                # hasn't already been created
-
-                                # create origin with to perform desired func
-                                pre.add_origin(origin_name, func)
-                        pre = pre.origin[origin_name]
-                    pre_output = pre.decoded_output
-                    
-                print 'transform.shape', transform.shape
-                print 'pre_output.shape', pre_output.eval().shape
-                print 'pre_output.type', pre_output.type
-                print 'encoded_output',
-                print TT.mul(transform, pre_output).eval().shape
-                # the encoded input to the next population is
-                # the transform * pre_output
-                encoded_output = TT.mul(transform, pre_output)
-                # pass in the pre population encoded output function
-                # to the post population, connecting them for theano
-                post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
-                return
-        
-        # if we're doing a decoded connection 
         if not isinstance(pre, origin.Origin):
-            # see if pre is the origin we want to connect to or not
+            # see if pre is an origin
             
-            # if pre is not an origin, find the origin the
-            # projection originates from
+            # if pre is not an origin, find the origin
+            # the projection originates from
 
             # take default identity decoded output from pre population
-            origin_name = 'X' 
+            origin_name = 'X'
 
             if func is not None:
-                # if we're supposed to compute a function,
+                # if we're supposed to compute a function on this connection
                 # create an origin to do it
 
                 # set name as the function being calculated
                 origin_name = func.__name__
-                #TODO: better analysis to see if we need to build
-                # a new origin (rather than just relying on the name)
+
+                #TODO: better analysis to see if we need to build a new origin
+                # (rather than just relying on the name)
                 if origin_name not in pre.origin:
-                    # if an origin for this function hasn't
-                    # already been created
+                    # if an origin for this function hasn't already been created
 
                     # create origin with to perform desired func
                     pre.add_origin(origin_name, func)
-
-            pre = pre.origin[origin_name]
+            pre_origin = pre.origin[origin_name]
 
         else:
             # if pre is an origin, make sure a function wasn't given
 
             # can't specify a function for an already created origin
             assert func == None
+            pre_origin = pre
 
-        decoded_output = pre.decoded_output
-        dim_pre = pre.dimensions
+        # get decoded_output from specified origin
+        pre_output = pre_origin.decoded_output
+        dim_pre = pre_origin.dimensions 
+      
+        if transform is not None: 
 
+            # there are 3 cases
+            # 1) pre = decoded, post = decoded
+            #       - in this case, transform will be (post.dimensions x pre.origin.dimensions)
+            #       - decoded_input will be (post.array_size x post.dimensions)
+            # 2) pre = decoded, post = encoded
+            #       - in this case, transform will be size (post.array_size x post.neurons x pre.origin.dimensions)
+            #       - encoded_input will be (post.array_size x post.neurons_num)
+            # 3) pre = encoded, post = encoded
+            #       - in this case, transform will be (post.array_size x post.neurons_num x pre.array_size x pre.neurons_num)
+            #       - encoded_input will be (post.array_size x post.neurons_num)
+
+            # make sure contradicting things aren't simultaneously specified
+            assert ((weight == 1) and (index_pre is None)
+                    and (index_post is None))
+
+            transform = np.array(transform)
+            
+            # check to see if post side is an encoded connection,
+            # i.e. case 2 or 3
+            if len(transform.shape) > 2:
+                #TODO: write code to handle these cases
+                '''
+                assert transform.shape[0] == post.array_size and transform.shape[1] == post.neurons_num
+                assert func == None # can't specify a function with an encoded connection
+
+                #TODO: write case for encoded - encoded connection that handles network arrays
+                if len(transform.shape) == 4: # for case 3
+                    assert transform.shape[2] == pre.array_size and transform.shape[3] == pre.neurons_num
+                    # can't get encoded output from Input or SimpleNode objects
+                    assert not (isinstance(pre, input.Input) or isinstance(pre, simplenode.SimpleNode)) 
+                    pre_output = pre.neurons.output
+                    
+                print 'transform.shape', transform.shape
+                print 'pre_output.shape', pre_output.eval().shape
+                print 'pre_output.type', pre_output.type
+                print 'encoded_output', TT.mul(transform, pre_output).eval().shape
+                # the encoded input to the next population is the transform x pre_output
+                #TODO: is there a bug in theano here?                               ?????????????????????????????????????????
+                encoded_output = TT.mul(transform, pre_output)
+                # pass in the pre population encoded output function
+                # to the post population, connecting them for theano
+                post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
+                return
+                '''
+                raise NotImplementedError 
+        
+        # if we're doing a decoded connection 
         if transform is None:
             # compute transform matrix if not given
             transform = self.compute_transform(
@@ -334,19 +294,12 @@ class Network(object):
 
         # apply transform matrix, directing pre dimensions
         # to specific post dimensions
-
-        print 'transform,', transform
-
-        # apply transform matrix, directing pre dimensions
-        # to specific post dimensions
-        decoded_output = TT.dot(transform, decoded_output)
-        print 'd_o.type:', decoded_output.type
-        print 'decoded_output: \n', decoded_output.eval()
+        decoded_output = TT.dot(transform, pre_output)
 
         # pass in the pre population decoded output function
         # to the post population, connecting them for theano
         post.add_filtered_input(pstc=pstc, decoded_input=decoded_output) 
-
+    
     def get_object(self, name):
         """This is a method for parsing input to return the proper object.
 
@@ -370,6 +323,18 @@ class Network(object):
             node = self.nodes[split[0]]
             return node.origin[split[1]]
        
+    def get_origin(self, name, func=None):
+        """This method takes in a string and returns the decoded_output function 
+        of this object. If no origin is specified in name then 'X' is used.
+
+        :param string name: the name of the object(and optionally :origin) from
+                            which to take decoded_output from
+        :returns: specified origin
+        """
+        obj = self.get_object(name) # get the object referred to by name
+
+        return obj
+
     def learn(self, pre, post, error, pstc=0.01, weight_matrix=None):
         """Add a connection with learning between pre and post,
         modulated by error.

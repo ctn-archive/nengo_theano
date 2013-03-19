@@ -68,7 +68,7 @@ class hPESTermination(LearnedTermination):
     # scaling_factor = 20e3     # from nengo
     # supervision_ratio = 0.5   # from nengo
 
-    learning_rate = 5e-3
+    learning_rate = TT.cast(5e-3, dtype='float32')
     theta_tau = 0.02
     scaling_factor = 10.
     supervision_ratio = 1.0
@@ -89,9 +89,7 @@ class hPESTermination(LearnedTermination):
 
         self.initial_theta = np.random.uniform(
             low=5e-5, high=15e-5,
-            size=self.post.neurons_num * self.post.array_size
-            ).astype('float32')
-
+            size=(self.post.array_size, self.post.neurons_num)).astype('float32')
         # Trevor's assumption: high gain -> high theta
         self.initial_theta *= self.gains
         self.theta = theano.shared(self.initial_theta, name='hPES.theta')
@@ -110,7 +108,7 @@ class hPESTermination(LearnedTermination):
         encoded_error = np.sum(self.encoders * self.error_value[None,:],
                                axis=-1)
 
-        supervised_rate = TT.cast(self.learning_rate, dtype='float32')
+        supervised_rate = self.learning_rate
         delta_supervised = (supervised_rate * self.pre_filtered[None,:]
                             * encoded_error[:,None])
 
@@ -122,8 +120,7 @@ class hPESTermination(LearnedTermination):
                                  * self.gains)[:,None])
 
         return (self.weight_matrix
-                + TT.cast(self.supervision_ratio, 'float32')
-                * delta_supervised
+                + TT.cast(self.supervision_ratio, 'float32') * delta_supervised
                 + TT.cast(1. - self.supervision_ratio, 'float32')
                 * delta_unsupervised)
         
