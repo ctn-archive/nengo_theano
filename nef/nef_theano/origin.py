@@ -26,10 +26,12 @@ class Origin(object):
         # if scalar, make it a list
         if isinstance(initial_value, Number):
             initial_value = [initial_value]
+        initial_value = numpy.float32(initial_value)
 
         # theano internal state defining output value
-        print 'initial_value:', initial_value
-        self.decoded_output = theano.shared(np.float32(initial_value)) 
+        print 'initial_value:', initial_value.shape
+        self.decoded_output = theano.shared(initial_value,
+                                            name='origin.decoded_output') 
 
         # find number of parameters of the projected value
         self.dimensions = len(initial_value)

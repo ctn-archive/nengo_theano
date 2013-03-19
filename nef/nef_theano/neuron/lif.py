@@ -19,18 +19,15 @@ class LIFNeuron(Neuron):
         Neuron.__init__(self, size, dt)
         self.tau_rc = tau_rc
         self.tau_ref  = tau_ref
-
-        print 'neurons size: ', size
-
-        # internal variables
         self.voltage = theano.shared(np.zeros(size).astype('float32'),
                                      name='lif.voltage')
-        self.refractory_time = theano.shared(np.zeros(size).astype('float32'),
-                                             name='lif.refractory_time')
+        self.refractory_time = theano.shared(
+            np.zeros(size).astype('float32'), name='lif.refractory_time')
+        
+    #TODO: make this generic so it can be applied to any neuron model
+    # (by running the neurons and finding their response function),
+    # rather than this special-case implementation for LIF        
 
-    #  TODO: make this generic so it can be applied to any neuron model
-    #(by running the neurons and finding their response function),
-    #rather than this special-case implementation for LIF
     def make_alpha_bias(self, max_rates, intercepts):
         """Compute the alpha and bias needed to get the given max_rate
         and intercept values.

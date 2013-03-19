@@ -217,7 +217,7 @@ class Ensemble:
             tau_rc=tau_rc, tau_ref=tau_ref, dt=dt)
 
         # compute alpha and bias
-        self.srng = RandomStreams(seed=self.seed)
+        self.srng = RandomStreams(seed=seed)
         max_rates = self.srng.uniform(
             size=(self.array_size, self.neurons_num),
             low=max_rate[0], high=max_rate[1])  
@@ -228,21 +228,12 @@ class Ensemble:
             [], self.neurons.make_alpha_bias(max_rates, threshold))()
 
         # force to 32 bit for consistency / speed
-        self.bias = self.bias.astype('float32') 
-
-        print 'bias.shape', self.bias.shape
-        print 'alpha.shape', alpha.shape
-
+        self.bias = self.bias.astype('float32')
+                
         # compute encoders
         self.encoders = self.make_encoders(encoders=encoders)
-        print 'encoders.T.shape', self.encoders.T.shape
-
         # combine encoders and gain for simplification
-        self.encoders = (self.encoders.T * alpha).T 
-        print 'encoders.T.shape', self.encoders.T.shape
-
-        # origins stored in a dictionary
-        self.origin = {}
+        self.encoders = (self.encoders.T * alpha.T).T
         
         # make default origin
         self.add_origin('X', func=None, eval_points=self.eval_points) 
@@ -431,8 +422,6 @@ class Ensemble:
         
         # add to input current for each neuron as
         # represented input signal x preferred direction
-        print 'J[0].shape', (
-            J[0] + TT.dot(self.encoders[0], X[0].T).eval()).shape
         J = [J[i] + TT.dot(self.encoders[i], X[i].T)
              for i in range(self.array_size)]
 

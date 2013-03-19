@@ -109,10 +109,7 @@ class Network(object):
 
         for i in range(array_size):
             for j in range(dim_post):
-                array_transform[i][j] = transform[i * dim_post + j]
-
-        print 'transform: ', array_transform
-        print 
+                array_transform[i][j] = transform[i*dim_post + j]
         return array_transform
         
     def connect(self, pre, post, transform=None, weight=1,
@@ -218,19 +215,20 @@ class Network(object):
             
             # check to see if it's an encoded connection
             if transform.shape[0] != post.dimensions:
-
                 #TODO: optimization: move this transform hstack
-                # instead to a theano TT function on encoded_output
+                # instead to a theano TT function on encoded_output =
                 # instead so the dot product for encoded output
                 # is quicker when network array w same projection
                 # to each ensemble
-                # just have to make sure that encoded output
-                # ends up being (post.array_size x post.neurons_num)
+                # just have to make sure that encoded output ends up being
+                # (post.array_size * post.neurons_num * post.dimensions)
                 if transform.shape[0] == post.neurons_num: 
-                    transform = np.array([transform] * post.array_size)
-                print 'transform.shape:',transform.shape
-                assert transform.shape == (post.array_size, post.neurons_num)
-
+                    print 'transform.shape', transform.shape
+                    transform = np.tile(np.array([transform]),
+                                        (post.array_size, 1, 1))
+                    print 'transform.shape', transform.shape
+                assert transform.shape == (
+                    post.array_size, post.neurons_num, post.dimensions)
                 # can't specify a function with an encoded connection
                 assert func == None 
                 # also can't get encoded output from Input or SimpleNode objects
@@ -302,8 +300,8 @@ class Network(object):
         # to specific post dimensions
 
         decoded_output = TT.dot(transform, decoded_output)
+        print 'd_o.type:', decoded_output.type
         print 'decoded_output: \n', decoded_output.eval()
-        print
 
         # pass in the pre population decoded output function
         # to the post population, connecting them for theano
