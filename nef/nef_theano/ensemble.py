@@ -223,6 +223,7 @@ class Ensemble:
         self.encoders = (self.encoders.T * alpha.T).T
         
         # make default origin
+        self.origin = {}
         self.add_origin('X', func=None, eval_points=self.eval_points) 
 
         # dictionary of accumulators tracking terminations
