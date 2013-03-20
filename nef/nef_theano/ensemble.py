@@ -405,19 +405,11 @@ class Ensemble:
         #TODO: optimize for when nothing is added to X
         # (ie there are no decoded inputs)
 
-        # find input current caused by decoded input signals,
-        # avoiding transposing our 3D matrix self.encoders
-        
         # add to input current for each neuron as
         # represented input signal x preferred direction
         #TODO: use TT.batched_dot function here instead?
         J = [J[i] + TT.dot(self.encoders[i], X[i].T)
              for i in range(self.array_size)]
-
-        print new_J
-        # calculate input_current for each neuron
-        # as represented input signal x preferred direction
-        J = new_J 
 
         # if noise has been specified for this neuron,
         # add Gaussian white noise with variance self.noise to the input_current
@@ -434,9 +426,9 @@ class Ensemble:
                     size=self.bias.shape, 
                     low=-self.noise/np.sqrt(self.dt), 
                     high=self.noise/np.sqrt(self.dt))
+
         # pass that total into the neuron model to produce
         # the main theano computation
-
         # updates is an ordered dictionary of theano variables to update
         updates = self.neurons.update(J)
         

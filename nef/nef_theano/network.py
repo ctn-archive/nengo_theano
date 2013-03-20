@@ -439,6 +439,13 @@ class Network(object):
         # and the theano description of how to compute them 
         updates = collections.OrderedDict()
 
+        # for every node in the network
+        for node in self.nodes.values():
+            # if there is some variable to update
+            if hasattr(node, 'update'):
+                # add it to the list of variables to update every time step
+                updates.update(node.update())
+
         # for debugging
         theano.config.compute_test_value = 'raise'
 
