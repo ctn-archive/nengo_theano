@@ -4,7 +4,6 @@ addTermination. Here we test by creating inhibitory connections.
 TODO:
   1. inhibitory to ensemble connection
   2. inhibitory to network array connection
-  3. inhibitory with scalar value
 """
 
 import numpy as np
@@ -23,18 +22,20 @@ net.make_input('in2', [1, .5, 0])
 net.make('A', neurons=neurons, dimensions=dimensions, intercept=(.1, 1))
 net.make('B', neurons=neurons, dimensions=dimensions) # for test 1
 net.make('B2', neurons=neurons, dimensions=dimensions, array_size=array_size) # for test 2 
-#net.make('B3', neurons=neurons, dimensions=dimensions) # for test 3
+net.make('B3', neurons=neurons, dimensions=dimensions, array_size=array_size) # for test 2 
 
 # setup inhibitory scaling matrix
 inhib_matrix = [[-10] * dimensions] * neurons
+inhib_matrix_2 = [[-10] * dimensions] * neurons * array_size
 
 # define our transform and connect up! 
 net.connect('in1', 'A')
 net.connect('in2', 'B', index_pre=0)
 net.connect('in2', 'B2')
+net.connect('in2', 'B3')
 net.connect('A', 'B', transform=inhib_matrix)
 net.connect('A', 'B2', transform=inhib_matrix) 
-#net.connect('A', 'B3', transform=[-10]) 
+net.connect('A', 'B3', transform=inhib_matrix_2) 
 
 timesteps = 500
 dt_step = 0.01
@@ -51,6 +52,8 @@ Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output,
                     dt_sample=dt_step, pstc=pstc)
 B2p = net.make_probe(net.nodes['B2'].origin['X'].decoded_output,
                      dt_sample=dt_step, pstc=pstc)
+B3p = net.make_probe(net.nodes['B3'].origin['X'].decoded_output,
+                     dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
 net.run(timesteps*dt_step)
@@ -66,7 +69,7 @@ plt.subplot(614); plt.title('B = In2(0) inhib by A')
 plt.plot(Bp.get_data())
 plt.subplot(615); plt.title('B2 = In2, network array inhib by A')
 plt.plot(B2p.get_data())
-#plt.subplot(616); plt.title('B3 = In2(0), inhib by scalar from A')
-#plt.plot(B3vals)
+plt.subplot(616); plt.title('B3 = In2(0), inhib by scalar from A')
+plt.plot(B3p.get_data())
 plt.tight_layout()
 plt.show()

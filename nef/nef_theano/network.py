@@ -263,10 +263,13 @@ class Network(object):
             # check to see if post side is an encoded connection, case 2 or 3
             if transform.shape[0] != post.dimensions * post.array_size:
                 #TODO: implement case 3
-                #TODO: handle case 2 with (post.total_neurons_num x pre.dimensions)
+
+                if transform.shape[0] == post.array_size * post.neurons_num:
+                    transform = transform.reshape(post.array_size, post.neurons_num, dim_pre)
 
                 if len(transform.shape) == 2: # repeat array_size times
                     transform = np.tile(transform, (post.array_size, 1, 1))
+
                 assert transform.shape ==  \
                            (post.array_size, post.neurons_num, dim_pre)
 
