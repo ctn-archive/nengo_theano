@@ -199,17 +199,14 @@ class Network(object):
         pre = self.get_object(pre)
 
         if not isinstance(pre, origin.Origin):
-            # see if pre is an origin
-            
             # if pre is not an origin, find the origin
             # the projection originates from
 
             # take default identity decoded output from pre population
             origin_name = 'X'
 
-            if func is not None:
-                # if we're supposed to compute a function on this connection
-                # create an origin to do it
+            if func is not None: 
+                # if this connection should compute a function
 
                 # set name as the function being calculated
                 origin_name = func.__name__
@@ -218,14 +215,13 @@ class Network(object):
                 # (rather than just relying on the name)
                 if origin_name not in pre.origin:
                     # if an origin for this function hasn't already been created
-
                     # create origin with to perform desired func
                     pre.add_origin(origin_name, func)
+
             pre_origin = pre.origin[origin_name]
 
         else:
             # if pre is an origin, make sure a function wasn't given
-
             # can't specify a function for an already created origin
             assert func == None
             pre_origin = pre
@@ -238,14 +234,17 @@ class Network(object):
 
             # there are 3 cases
             # 1) pre = decoded, post = decoded
-            #       - in this case, transform will be (post.dimensions x pre.origin.dimensions)
-            #       - decoded_input will be (post.array_size x post.dimensions)
+            #     - in this case, transform will be 
+            #                       (post.dimensions x pre.origin.dimensions)
+            #     - decoded_input will be (post.array_size x post.dimensions)
             # 2) pre = decoded, post = encoded
-            #       - in this case, transform will be size (post.array_size x post.neurons x pre.origin.dimensions)
-            #       - encoded_input will be (post.array_size x post.neurons_num)
+            #     - in this case, transform will be size 
+            #         (post.array_size x post.neurons x pre.origin.dimensions)
+            #     - encoded_input will be (post.array_size x post.neurons_num)
             # 3) pre = encoded, post = encoded
-            #       - in this case, transform will be (post.array_size x post.neurons_num x pre.array_size x pre.neurons_num)
-            #       - encoded_input will be (post.array_size x post.neurons_num)
+            #     - in this case, transform will be (post.array_size x 
+            #             post.neurons_num x pre.array_size x pre.neurons_num)
+            #     - encoded_input will be (post.array_size x post.neurons_num)
 
             # make sure contradicting things aren't simultaneously specified
             assert ((weight == 1) and (index_pre is None)
@@ -253,38 +252,36 @@ class Network(object):
 
             transform = np.array(transform)
             
-            # check to see if post side is an encoded connection,
-            # i.e. case 2 or 3
-            if len(transform.shape) > 2:
-                #TODO: write code to handle these cases
-                '''
-                assert transform.shape[0] == post.array_size and transform.shape[1] == post.neurons_num
-                assert func == None # can't specify a function with an encoded connection
+            # check to see if post side is an encoded connection, case 2 or 3
+            if transform.shape[0] != post.dimensions:
 
-                #TODO: write case for encoded - encoded connection that handles network arrays
-                if len(transform.shape) == 4: # for case 3
-                    assert transform.shape[2] == pre.array_size and transform.shape[3] == pre.neurons_num
-                    # can't get encoded output from Input or SimpleNode objects
-                    assert not (isinstance(pre, input.Input) or isinstance(pre, simplenode.SimpleNode)) 
-                    pre_output = pre.neurons.output
-                    
-                print 'transform.shape', transform.shape
-                print 'pre_output.shape', pre_output.eval().shape
-                print 'pre_output.type', pre_output.type
-                print 'encoded_output', TT.mul(transform, pre_output).eval().shape
-                # the encoded input to the next population is the transform x pre_output
-                #TODO: is there a bug in theano here?                               ?????????????????????????????????????????
-                encoded_output = TT.mul(transform, pre_output)
+                if len(transform.shape) == 2: # repeat array_size times
+                    transform = np.tile(transform, (post.array_size, 1, 1))
+                assert transform.shape ==  \
+                           (post.array_size, post.neurons_num, pre.dimensions)
+
+                # can't specify a function with either side encoded connection
+                assert func == None 
+
+                pre_output = TT.stack([pre_output]*post.neurons_num)
+                print 'transform.shape', transform.shape  
+                print 'pre_output.eval().shape', pre_output.eval().shape
+                encoded_output = TT.batched_dot( TT.reshape(transform, (post.array_size, post.neurons_num, pre.dimensions)),
+                                                 TT.reshape(pre_output, (post.neurons_num, pre.dimensions, 1)))
+                # at this point encoded output should be (post.array_size x post.neurons_num x 1)
+                encoded_output = TT.reshape(encoded_output, (post.array_size, post.neurons_num))
+                print 'encoded_output.eval().shape', encoded_output.eval().shape
+                #encoded_output = TT.mul(transform, pre_output)
                 # pass in the pre population encoded output function
                 # to the post population, connecting them for theano
                 post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
                 return
                 '''
-                raise NotImplementedError 
+                raise NotImplementedError '''
         
-        # if we're doing a decoded connection 
+        # if decoded-decoded connection, i.e. case 1
         if transform is None:
-            # compute transform matrix if not given
+            # compute transform if not given
             transform = self.compute_transform(
                 dim_pre=dim_pre,
                 dim_post=post.dimensions,
