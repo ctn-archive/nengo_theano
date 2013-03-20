@@ -452,8 +452,7 @@ class Ensemble:
             # also update the weight matrices on learned terminations
             updates.update(l.update())
 
-        # and compute the decoded origin decoded_input
-        # from the neuron output
+        # and compute the decoded origin decoded_input from the neuron output
         for o in self.origin.values():
             # in the dictionary updates, set each origin's
             # output decoded_input equal to the
