@@ -58,7 +58,7 @@ class Network(object):
         self.nodes[node.name] = node
 
     def compute_transform(self, dim_pre, dim_post, array_size, weight=1,
-                          index_pre=None, index_post=None):
+                          index_pre=None, index_post=None, transform=None):
         """Helper function used by :func:`nef.Network.connect()` to create
         the `dim_post` by `dim_pre` transform matrix.
 
@@ -82,36 +82,44 @@ class Network(object):
 
         """
 
-        # create a matrix of zeros
-        transform = [[0] * dim_pre for i in range(dim_post * array_size)]
+        if transform is None:
+            # create a matrix of zeros
+            transform = [[0] * dim_pre for i in range(dim_post * array_size)]
 
-        # default index_pre/post lists set up *weight* value
-        # on diagonal of transform
-        
-        # if dim_post * array_size != dim_pre,
-        # then values wrap around when edge hit
-        if index_pre is None:
-            index_pre = range(dim_pre) 
-        elif isinstance(index_pre, int):
-            index_pre = [index_pre] 
-        if index_post is None:
-            index_post = range(dim_post * array_size) 
-        elif isinstance(index_post, int):
-            index_post = [index_post]
+            # default index_pre/post lists set up *weight* value
+            # on diagonal of transform
+            
+            # if dim_post * array_size != dim_pre,
+            # then values wrap around when edge hit
+            if index_pre is None:
+                index_pre = range(dim_pre) 
+            elif isinstance(index_pre, int):
+                index_pre = [index_pre] 
+            if index_post is None:
+                index_post = range(dim_post * array_size) 
+            elif isinstance(index_post, int):
+                index_post = [index_post]
 
-        for i in range(max(len(index_pre), len(index_post))):
-            pre = index_pre[i % len(index_pre)]
-            post = index_post[i % len(index_post)]
-            transform[post][pre] = weight
+            for i in range(max(len(index_pre), len(index_post))):
+                pre = index_pre[i % len(index_pre)]
+                post = index_post[i % len(index_post)]
+                transform[post][pre] = weight
 
-        #reformulate to account for post.array_size
-        array_transform = [[[0] * dim_pre for i in range(dim_post)]
-                           for j in range(array_size)]
+        transform = np.array(transform)
 
-        for i in range(array_size):
-            for j in range(dim_post):
-                array_transform[i][j] = transform[i*dim_post + j]
-        return array_transform
+        # reformulate to account for post.array_size
+        if transform.shape == (dim_post * array_size, dim_pre):
+
+            array_transform = [[[0] * dim_pre for i in range(dim_post)]
+                               for j in range(array_size)]
+
+            for i in range(array_size):
+                for j in range(dim_post):
+                    array_transform[i][j] = transform[i*dim_post + j]
+
+            transform = array_transform
+
+        return transform
         
     def connect(self, pre, post, transform=None, weight=1,
                 index_pre=None, index_post=None, pstc=0.01, func=None):
@@ -253,42 +261,38 @@ class Network(object):
             transform = np.array(transform)
             
             # check to see if post side is an encoded connection, case 2 or 3
-            if transform.shape[0] != post.dimensions:
+            if transform.shape[0] != post.dimensions * post.array_size:
+                #TODO: implement case 3
+                #TODO: handle case 2 with (post.total_neurons_num x pre.dimensions)
 
                 if len(transform.shape) == 2: # repeat array_size times
                     transform = np.tile(transform, (post.array_size, 1, 1))
                 assert transform.shape ==  \
-                           (post.array_size, post.neurons_num, pre.dimensions)
+                           (post.array_size, post.neurons_num, dim_pre)
 
                 # can't specify a function with either side encoded connection
                 assert func == None 
 
                 pre_output = TT.stack([pre_output]*post.neurons_num)
-                print 'transform.shape', transform.shape  
-                print 'pre_output.eval().shape', pre_output.eval().shape
-                encoded_output = TT.batched_dot( TT.reshape(transform, (post.array_size, post.neurons_num, pre.dimensions)),
-                                                 TT.reshape(pre_output, (post.neurons_num, pre.dimensions, 1)))
+                encoded_output = TT.batched_dot( TT.reshape(transform, (post.array_size, post.neurons_num, dim_pre)),
+                                                 TT.reshape(pre_output, (post.neurons_num, dim_pre, 1)))
                 # at this point encoded output should be (post.array_size x post.neurons_num x 1)
                 encoded_output = TT.reshape(encoded_output, (post.array_size, post.neurons_num))
-                print 'encoded_output.eval().shape', encoded_output.eval().shape
-                #encoded_output = TT.mul(transform, pre_output)
                 # pass in the pre population encoded output function
                 # to the post population, connecting them for theano
                 post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
                 return
-                '''
-                raise NotImplementedError '''
         
         # if decoded-decoded connection, i.e. case 1
-        if transform is None:
-            # compute transform if not given
-            transform = self.compute_transform(
-                dim_pre=dim_pre,
-                dim_post=post.dimensions,
-                array_size=post.array_size,
-                weight=weight,
-                index_pre=index_pre,
-                index_post=index_post)
+        # compute transform if not given, if given make sure shape is correct
+        transform = self.compute_transform(
+            dim_pre=dim_pre,
+            dim_post=post.dimensions,
+            array_size=post.array_size,
+            weight=weight,
+            index_pre=index_pre,
+            index_post=index_post, 
+            transform=transform)
 
         # apply transform matrix, directing pre dimensions
         # to specific post dimensions
