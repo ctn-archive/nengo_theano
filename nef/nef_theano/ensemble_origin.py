@@ -28,7 +28,7 @@ class EnsembleOrigin(Origin):
             self.ensemble.array_size * self.decoders.shape[2]) 
         Origin.__init__(self, func=func, initial_value=initial_value)
     
-    def compute_decoder(self, func, eval_points=None):     
+    def compute_decoders(self, func, eval_points=None):     
         """Compute decoding weights.
 
         Calculate the scaling values to apply to the output
