@@ -261,32 +261,57 @@ class Network(object):
             transform = np.array(transform)
             
             # check to see if post side is an encoded connection, case 2 or 3
-            if transform.shape[0] != post.dimensions * post.array_size:
-                #TODO: implement case 3
+            #TODO: a better check for this
+            if transform.shape[0] != post.dimensions * post.array_size \
+                                                or len(transform.shape) > 2:
+
+                #TODO: make sure all these reshapes are reshaping the right way
 
                 if transform.shape[0] == post.array_size * post.neurons_num:
-                    transform = transform.reshape(post.array_size, post.neurons_num, dim_pre)
-
+                    transform = transform.reshape(
+                                      [post.array_size, post.neurons_num] +\
+                                                list(transform.shape[1:]))
+                
                 if len(transform.shape) == 2: # repeat array_size times
                     transform = np.tile(transform, (post.array_size, 1, 1))
+                
+                # check for pre side encoded connection (case 3)
+                if len(transform.shape) > 3 or \
+                       transform.shape[2] == pre.array_size * pre.neurons_num:
+    
+                    if transform.shape[2] == pre.array_size * pre.neurons_num: 
+                        transform.reshape([transform[0:2], pre.array_size, pre.neurons_num])
+                    assert transform.shape == \
+                            (post.array_size, post.neurons_num, pre.array_size, pre.neurons_num)
 
-                assert transform.shape ==  \
-                           (post.array_size, post.neurons_num, dim_pre)
+                    # get spiking output from pre population
+                    pre_output = pre.neurons.output 
 
-                # can't specify a function with either side encoded connection
-                assert func == None 
+                    encoded_output = TT.mul( TT.reshape(transform, (post.array_size, post.neurons_num, pre.array_size, pre.neurons_num)), 
+                                             TT.reshape(pre_output, (pre.array_size, pre.neuron_num)) )
+                    # pass in the pre population encoded output function
+                    # to the post population, connecting them for theano
+                    post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
+                    return
+                                   
+                else: # otherwise we're in case 2
+                    assert transform.shape ==  \
+                               (post.array_size, post.neurons_num, dim_pre)
+                    
+                    # can't specify a function with either side encoded connection
+                    assert func == None 
 
-                pre_output = TT.stack([pre_output]*post.neurons_num)
-                encoded_output = TT.batched_dot( TT.reshape(transform, (post.array_size, post.neurons_num, dim_pre)),
-                                                 TT.reshape(pre_output, (post.neurons_num, dim_pre, 1)))
-                # at this point encoded output should be (post.array_size x post.neurons_num x 1)
-                encoded_output = TT.reshape(encoded_output, (post.array_size, post.neurons_num))
-                # pass in the pre population encoded output function
-                # to the post population, connecting them for theano
-                post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
-                return
+                    pre_output = TT.stack([pre_output] * post.neurons_num)
+                    encoded_output = TT.batched_dot( TT.reshape(transform, (post.array_size, post.neurons_num, dim_pre)),
+                                                     TT.reshape(pre_output, (post.neurons_num, dim_pre, 1)) )
+                    # at this point encoded output should be (post.array_size x post.neurons_num x 1)
+                    encoded_output = TT.reshape(encoded_output, (post.array_size, post.neurons_num))
+                    # pass in the pre population encoded output function
+                    # to the post population, connecting them for theano
+                    post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
+                    return
         
-        # if decoded-decoded connection, i.e. case 1
+        # if decoded-decoded connection (case 1)
         # compute transform if not given, if given make sure shape is correct
         transform = self.compute_transform(
             dim_pre=dim_pre,
