@@ -278,17 +278,30 @@ class Network(object):
                 # check for pre side encoded connection (case 3)
                 if len(transform.shape) > 3 or \
                        transform.shape[2] == pre.array_size * pre.neurons_num:
-    
+                    
                     if transform.shape[2] == pre.array_size * pre.neurons_num: 
-                        transform.reshape([transform[0:2], pre.array_size, pre.neurons_num])
+                        transform = transform.reshape(
+                                        [post.array_size, post.neurons_num,  
+                                              pre.array_size, pre.neurons_num])
                     assert transform.shape == \
                             (post.array_size, post.neurons_num, pre.array_size, pre.neurons_num)
+                    
+                    print 'transform.shape', transform.shape
 
                     # get spiking output from pre population
                     pre_output = pre.neurons.output 
 
                     encoded_output = TT.mul( TT.reshape(transform, (post.array_size, post.neurons_num, pre.array_size, pre.neurons_num)), 
-                                             TT.reshape(pre_output, (pre.array_size, pre.neuron_num)) )
+                                             TT.reshape(pre_output, (pre.array_size, pre.neurons_num)) )
+                    # sum the contribution from all pre neurons for each post neuron 
+                    encoded_output = TT.sum(encoded_output, axis=3)
+                    # sum the contribution from each of the pre arrays for each post neuron
+                    encoded_output = TT.sum(encoded_output, axis=2)
+                    # reshape! 
+                    encoded_output = TT.reshape(encoded_output, (post.array_size, post.neurons_num))
+
+                    print 'encoded_output.eval().shape', encoded_output.eval().shape
+
                     # pass in the pre population encoded output function
                     # to the post population, connecting them for theano
                     post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
