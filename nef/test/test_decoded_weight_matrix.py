@@ -1,7 +1,7 @@
-"""This is a test file to test the decoded_weight_matrix parameter on
-addTermination. Here we test by creating inhibitory connections.
+"""This is a test file to test the decoded -> encoded connections through the 
+transform parameter in net.connect. Here we test by creating inhibitory connections.
 
-TODO:
+Tests:
   1. inhibitory to ensemble connection with T = (neurons x dimensions)
   2. inhibitory to network array connection with T = (neurons x dimensions)
   3. inhibitory to network array with T = (array_size x neurons x dimensions)
