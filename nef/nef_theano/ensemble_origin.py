@@ -165,7 +165,6 @@ class EnsembleOrigin(Origin):
     def update(self, spikes):
         """the theano computation for converting neuron output
         into a decoded value.
-
         
         returns a dictionary with the decoded output value
 
