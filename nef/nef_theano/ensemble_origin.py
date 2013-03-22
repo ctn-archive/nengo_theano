@@ -174,10 +174,18 @@ class EnsembleOrigin(Origin):
             from the attached population
 
         """
+
+        # assuming decoders are numpy array and trying to put them into
+        # a theano variable instead to see what happens (#HACK)
+
+        # XXX shared_decoders are *NOT* aliased to self.decoders in
+        #     any way
+        shared_decoders = theano.shared(self.decoders.astype(spikes.dtype))
+
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range
         decoded_output = TT.concatenate(
-            [TT.flatten(TT.dot(spikes[i], self.decoders[i]))
+            [TT.flatten(TT.dot(spikes[i], shared_decoders[i]))
              for i in range(self.ensemble.array_size)])
         decoded_output = TT.mul(
             decoded_output, self.ensemble.radius).astype('float32')
