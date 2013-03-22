@@ -54,14 +54,9 @@ class hPESTermination(LearnedTermination):
         encoded_error = np.sum(self.encoders * self.error_value[None,:],
                                axis=-1)
 
-        print 'encoded_error.eval().shape', encoded_error.eval().shape
-        print 'self.pre_filtered.eval().shape', self.pre_filtered.eval().shape
-
         supervised_rate = self.learning_rate
         delta_supervised = [(supervised_rate * self.pre_filtered[i][:,None] * 
                              encoded_error[i]) for i in range(self.post.array_size)]
-
-        print 'delta_supervised', delta_supervised
 
         unsupervised_rate = TT.cast(
             self.learning_rate * self.scaling_factor, dtype='float32')
@@ -70,16 +65,12 @@ class hPESTermination(LearnedTermination):
                              (self.post_filtered - self.theta) * 
                               self.gains)[i][:,None] ) for i in range(self.post.array_size)]
 
-        print 'delta_unsupervised', delta_unsupervised
-        print 'self.weight_matrix.eval().shape', self.weight_matrix.eval().shape
-
         change = (self.weight_matrix[0]
                 + TT.cast(self.supervision_ratio, 'float32') * delta_supervised
                 + TT.cast(1. - self.supervision_ratio, 'float32')
                 * delta_unsupervised)
 
         change = TT.unbroadcast(change, 0)
-        print 'change.type', change.type
 
         return change
         
