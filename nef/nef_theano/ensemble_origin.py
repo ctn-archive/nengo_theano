@@ -97,7 +97,6 @@ class EnsembleOrigin(Origin):
             if data is not None:
                 Ginv, A = data
             else:
-                print 'recomputing',key
                 # compute the input current for every neuron and every sample point
                 J = np.dot(self.ensemble.encoders[index], eval_points)
                 J += self.ensemble.bias[index][:, np.newaxis]
