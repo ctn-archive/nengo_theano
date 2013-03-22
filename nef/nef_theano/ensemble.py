@@ -287,7 +287,6 @@ class Ensemble:
         elif learn_input:
             self.accumulators[pstc].add_learn_input(learn_input)
 
-    #TODO: make this support specifying error origins
     def add_learned_termination(self, pre, error, pstc, weight_matrix=None,
                                 learned_termination_class=hPESTermination):
         """Adds a learned termination to the ensemble.
@@ -320,6 +319,10 @@ class Ensemble:
             pre, self, error, weight_matrix)
         learn_output = TT.dot(
             pre.neurons.output, learned_term.weight_matrix.T)
+        # learn_output should now be (array_size x neurons_num x 1)
+        # reshape to make it (array_size x neurons_num)
+        learn_output = TT.reshape( learn_output, (self.array_size, 
+                                   self.neurons_num) )
 
         # add learn output to the accumulator to handle
         # the input_current from this connection during simulation
@@ -401,7 +404,9 @@ class Ensemble:
             if hasattr(a, 'new_learn_input'):
                 # if there's a learn input in this accumulator
                 # add its values directly to the input current 
+                print 'J.shape', J.shape
                 J += a.new_learn_input
+                print 'J.eval().shape', J.eval().shape
 
         #TODO: optimize for when nothing is added to X
         # (ie there are no decoded inputs)

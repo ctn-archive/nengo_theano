@@ -30,7 +30,7 @@ class LearnedTermination(object):
         # initialize weight matrix
         self.initial_weight_matrix = initial_weight_matrix.astype('float32')
         self.weight_matrix = theano.shared(
-            self.initial_weight_matrix, name='weight_matrix')
+            self.initial_weight_matrix, name='learned_termination.weight_matrix')
 
     def reset(self):
         self.weight_matrix.set_value(self.initial_weight_matrix)
