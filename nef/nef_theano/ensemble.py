@@ -409,7 +409,13 @@ class Ensemble:
         # add to input current for each neuron as
         # represented input signal x preferred direction
         #TODO: use TT.batched_dot function here instead?
-        J = [J[i] + TT.dot(self.encoders[i], X[i].T)
+
+        assert not hasattr(self.encoders, 'type')
+        assert hasattr(X, 'type')
+        # XXX shared_encoders are *NOT* aliased to self.encoders in
+        #     any way
+        shared_encoders = theano.shared(self.encoders.astype(X.dtype))
+        J = [J[i] + TT.dot(shared_encoders[i], X[i].T)
              for i in range(self.array_size)]
 
         # if noise has been specified for this neuron,
