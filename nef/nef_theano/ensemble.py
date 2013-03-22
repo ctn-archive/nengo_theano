@@ -404,9 +404,7 @@ class Ensemble:
             if hasattr(a, 'new_learn_input'):
                 # if there's a learn input in this accumulator
                 # add its values directly to the input current 
-                print 'J.shape', J.shape
                 J += a.new_learn_input
-                print 'J.eval().shape', J.eval().shape
 
         #TODO: optimize for when nothing is added to X
         # (ie there are no decoded inputs)
