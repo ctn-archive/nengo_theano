@@ -6,6 +6,7 @@ import numpy as np
 
 from . import neuron
 from . import ensemble_origin
+from . import cache
 from .hPES_termination import hPESTermination
 
 class Accumulator:
@@ -143,7 +144,7 @@ class Ensemble:
     def __init__(self, neurons, dimensions, tau_ref=0.002, tau_rc=0.02,
                  max_rate=(200, 300), intercept=(-1.0, 1.0), radius=1.0,
                  encoders=None, seed=None, neuron_type='lif', dt=0.001,
-                 array_size=1, eval_points=None,
+                 array_size=1, eval_points=None, decoder_noise=0.1,
                  noise_type='uniform', noise=None):
         """Construct an ensemble composed of the specific neuron model,
         with the specified neural parameters.
@@ -173,6 +174,8 @@ class Ensemble:
         :param int array_size: number of sub-populations for network arrays
         :param list eval_points:
             specific set of points to optimize decoders over by default
+        :param float decoder_noise: amount of noise to assume when computing 
+            decoder    
         :param string noise_type:
             the type of noise added to the input current.
             Possible options = {'uniform', 'gaussian'}.
@@ -194,8 +197,12 @@ class Ensemble:
         self.radius = radius
         self.eval_points = eval_points
         self.noise = noise
+        self.decoder_noise=decoder_noise
         self.dt = dt
         self.noise_type = noise_type
+        self.cache_key = cache.generate_ensemble_key(neurons, dimensions, 
+                     tau_rc, tau_ref, max_rate, intercept, radius, encoders, 
+                     decoder_noise, eval_points, noise, seed)
 
         # create the neurons
         # TODO: handle different neuron types,
