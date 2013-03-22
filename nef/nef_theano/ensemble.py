@@ -5,7 +5,7 @@ import numpy as np
 
 from . import neuron
 from . import ensemble_origin
-from .learned_termination import hPESTermination
+from .hPES_termination import hPESTermination
 
 class Accumulator:
     def __init__(self, ensemble, pstc):
@@ -298,7 +298,7 @@ class Ensemble:
         to the specified learning rule.
 
         :param Ensemble pre: the pre-synaptic population
-        :param Ensemble error: the population that provides the error signal
+        :param Ensemble error: the Origin that provides the error signal
         :param list weight_matrix:
             the initial connection weights with which to start
         

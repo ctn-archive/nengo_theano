@@ -203,36 +203,10 @@ class Network(object):
         # get post Node object from node dictionary
         post = self.get_object(post)
 
+        # get the origin from the pre Node
+        pre_origin = self.get_origin(pre)
         # get pre Node object from node dictionary
         pre = self.get_object(pre)
-
-        if not isinstance(pre, origin.Origin):
-            # if pre is not an origin, find the origin
-            # the projection originates from
-
-            # take default identity decoded output from pre population
-            origin_name = 'X'
-
-            if func is not None: 
-                # if this connection should compute a function
-
-                # set name as the function being calculated
-                origin_name = func.__name__
-
-                #TODO: better analysis to see if we need to build a new origin
-                # (rather than just relying on the name)
-                if origin_name not in pre.origin:
-                    # if an origin for this function hasn't already been created
-                    # create origin with to perform desired func
-                    pre.add_origin(origin_name, func)
-
-            pre_origin = pre.origin[origin_name]
-
-        else:
-            # if pre is an origin, make sure a function wasn't given
-            # can't specify a function for an already created origin
-            assert func == None
-            pre_origin = pre
 
         # get decoded_output from specified origin
         pre_output = pre_origin.decoded_output
@@ -373,11 +347,39 @@ class Network(object):
         """
         obj = self.get_object(name) # get the object referred to by name
 
+        if not isinstance(obj, origin.Origin):
+            # if obj is not an origin, find the origin
+            # the projection originates from
+
+            # take default identity decoded output from obj population
+            origin_name = 'X'
+
+            if func is not None: 
+                # if this connection should compute a function
+
+                # set name as the function being calculated
+                origin_name = func.__name__
+
+                #TODO: better analysis to see if we need to build a new origin
+                # (rather than just relying on the name)
+                if origin_name not in obj.origin:
+                    # if an origin for this function hasn't already been created
+                    # create origin with to perform desired func
+                    obj.add_origin(origin_name, func)
+
+            obj = obj.origin[origin_name]
+
+        else:
+            # if obj is an origin, make sure a function wasn't given
+            # can't specify a function for an already created origin
+            assert func == None
+
         return obj
 
     def learn(self, pre, post, error, pstc=0.01, weight_matrix=None):
         """Add a connection with learning between pre and post,
-        modulated by error.
+        modulated by error. Error can be a Node, or an origin. If no 
+        origin is specified in the format node:origin, then 'X' is used.
 
         :param Ensemble pre: the pre-synaptic population
         :param Ensemble post: the post-synaptic population
@@ -388,7 +390,7 @@ class Network(object):
         """
         pre = self.get_object(pre)
         post = self.get_object(post)
-        error = self.get_object(error)
+        error = self.get_origin(error)
         return post.add_learned_termination(pre, error, pstc, weight_matrix)
 
     def make(self, name, *args, **kwargs): 
