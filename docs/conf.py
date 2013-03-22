@@ -37,7 +37,8 @@ class Mock(object):
             return Mock()
 
 MOCK_MODULES = ['numpy', 'theano.tensor.shared_randomstreams',
-                'theano.tensor', 'theano']
+                'theano.tensor', 'theano.sandbox.rng_mrg',
+                'theano.sandbox', 'theano']
 for mod_name in MOCK_MODULES:
     sys.modules[mod_name] = Mock()
 
