@@ -2,7 +2,8 @@ import collections
 
 import theano
 from theano import tensor as TT
-from theano.tensor.shared_randomstreams import RandomStreams
+#from theano.tensor.shared_randomstreams import RandomStreams
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import numpy as np
 
 from . import neuron
@@ -154,7 +155,7 @@ class EnsembleOrigin(Origin):
         samples = samples / TT.sqrt(norm)
 
         # generate magnitudes for vectors from uniform distribution
-        scale = (srng.uniform([self.num_samples])
+        scale = (srng.uniform((self.num_samples,))
                  ** (1.0 / self.ensemble.dimensions))
 
         # scale sample points

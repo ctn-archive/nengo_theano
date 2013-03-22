@@ -1,5 +1,6 @@
 import theano
-from theano.tensor.shared_randomstreams import RandomStreams
+#from theano.tensor.shared_randomstreams import RandomStreams
+from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as TT
 import numpy as np
 
