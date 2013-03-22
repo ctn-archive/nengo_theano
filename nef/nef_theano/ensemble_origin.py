@@ -7,6 +7,7 @@ from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import numpy as np
 
 from . import neuron
+from . import cache
 from .origin import Origin
 
 class EnsembleOrigin(Origin):
@@ -91,50 +92,64 @@ class EnsembleOrigin(Origin):
                              target_values.shape[0]))
 
         for index in range(self.ensemble.array_size): 
-            # compute the input current for every neuron and every sample point
-            J = np.dot(self.ensemble.encoders[index], eval_points)
-            J += self.ensemble.bias[index][:, np.newaxis]
+            key=self.ensemble.cache_key+'_%d'%index
+            data = cache.get_gamma_inv(key)
+            if data is not None:
+                Ginv, A = data
+            else:
+                print 'recomputing',key
+                # compute the input current for every neuron and every sample point
+                J = np.dot(self.ensemble.encoders[index], eval_points)
+                J += self.ensemble.bias[index][:, np.newaxis]
 
-            # so in parallel we can calculate the activity
-            # of all of the neurons at each sample point 
-            neurons = self.ensemble.neurons.__class__(
-                size=(self.ensemble.neurons_num, self.num_samples), 
-                tau_rc=self.ensemble.neurons.tau_rc,
-                tau_ref=self.ensemble.neurons.tau_ref)
+                # so in parallel we can calculate the activity
+                # of all of the neurons at each sample point 
+                neurons = self.ensemble.neurons.__class__(
+                    size=(self.ensemble.neurons_num, self.num_samples), 
+                    tau_rc=self.ensemble.neurons.tau_rc,
+                    tau_ref=self.ensemble.neurons.tau_ref)
 
-            # run the neuron model for 1 second,
-            # accumulating spikes to get a spike rate
-            #TODO: is this long enough? Should it be less?
-            # If we do less, we may get a good noise approximation!
-            A = neuron.accumulate(J, neurons)
+                # run the neuron model for 1 second,
+                # accumulating spikes to get a spike rate
+                #TODO: is this long enough? Should it be less?
+                # If we do less, we may get a good noise approximation!
+                A = neuron.accumulate(J, neurons)
 
-            # compute Gamma and Upsilon
-            G = np.dot(A, A.T) # correlation matrix
+                # compute Gamma and Upsilon
+                G = np.dot(A, A.T) # correlation matrix
+                
+                #TODO: optimize this so we're not doing
+                # the full eigenvalue decomposition
+                #TODO: add NxS method for large N?
+                #TODO: compare below with pinv rcond
+                
+                #TODO: check the decoder_noise math, and maybe add on to the
+                #      diagonal of G?
+
+                # eigh for symmetric matrices, returns
+                # evalues w and normalized evectors v
+                w, v = np.linalg.eigh(G)
+
+                dnoise = self.ensemble.decoder_noise * self.ensemble.decoder_noise
+
+                # formerly 0.1 * 0.1 * max(w), set threshold
+                limit = dnoise * max(w) 
+                for i in range(len(w)):
+                    if w[i] < limit:
+                        # if < limit set eval = 0
+                        w[i] = 0
+                    else:
+                        # prep for upcoming Ginv calculation
+                        w[i] = 1.0 / w[i]
+                # w[:, np.newaxis] gives transpose of vector,
+                # np.multiply is very fast element-wise multiplication
+                Ginv = np.dot(v, np.multiply(w[:, np.newaxis], v.T)) 
+                
+                #Ginv=np.linalg.pinv(G, rcond=.01)  
+                cache.set_gamma_inv(key, (Ginv, A))
+
+
             U = np.dot(A, target_values.T)
-            
-            #TODO: optimize this so we're not doing
-            # the full eigenvalue decomposition
-            #TODO: add NxS method for large N?
-            #TODO: compare below with pinv rcond
-
-            # eigh for symmetric matrices, returns
-            # evalues w and normalized evectors v
-            w, v = np.linalg.eigh(G)
-
-            # formerly 0.1 * 0.1 * max(w), set threshold
-            limit = .01 * max(w) 
-            for i in range(len(w)):
-                if w[i] < limit:
-                    # if < limit set eval = 0
-                    w[i] = 0
-                else:
-                    # prep for upcoming Ginv calculation
-                    w[i] = 1.0 / w[i]
-            # w[:, np.newaxis] gives transpose of vector,
-            # np.multiply is very fast element-wise multiplication
-            Ginv = np.dot(v, np.multiply(w[:, np.newaxis], v.T)) 
-            
-            #Ginv=np.linalg.pinv(G, rcond=.01)  
             
             # compute decoders - least squares method 
             decoders[index] = np.dot(Ginv, U) / (self.ensemble.neurons.dt)
