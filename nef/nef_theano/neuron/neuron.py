@@ -20,7 +20,7 @@ def accumulate(input, neuron, time=1.0, init_time=0.05):
 
     """
     # create internal state variable to keep track of number of spikes
-    total = theano.shared(np.zeros(neuron.size).astype('float32'))
+    total = theano.shared(np.zeros(neuron.size).astype('float32'), 'neuron.total')
     
     ### make the standard neuron update function
 
@@ -65,7 +65,7 @@ class Neuron(object):
         self.size = size
         self.dt = dt
         # set up theano internal state variable
-        self.output = theano.shared(np.zeros(size).astype('float32'))
+        self.output = theano.shared(np.zeros(size).astype('float32'), 'neuron.output')
 
     def reset(self):
         """Reset the state of the neuron."""

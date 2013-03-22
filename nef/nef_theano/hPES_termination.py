@@ -25,6 +25,7 @@ class hPESTermination(LearnedTermination):
         # of the pre(post)-synaptic neurons
         self.pre_spikes = self.pre.neurons.output
         self.post_spikes = self.post.neurons.output
+        # get the decoded error signal
         self.error_value = self.error.decoded_output
 
         # get gains (alphas) for post neurons
@@ -40,9 +41,9 @@ class hPESTermination(LearnedTermination):
         self.theta = theano.shared(self.initial_theta, name='hPES.theta')
 
         self.pre_filtered = theano.shared(
-            self.pre_spikes.get_value().flatten(), name='hPES.pre_filtered')
+            self.pre_spikes.get_value(), name='hPES.pre_filtered')
         self.post_filtered = theano.shared(
-            self.post_spikes.get_value().flatten(), name='hPES.post_filtered')
+            self.post_spikes.get_value(), name='hPES.post_filtered')
 
     def reset(self):
         super(hPESTermination, self).reset()
@@ -53,21 +54,34 @@ class hPESTermination(LearnedTermination):
         encoded_error = np.sum(self.encoders * self.error_value[None,:],
                                axis=-1)
 
+        print 'encoded_error.eval().shape', encoded_error.eval().shape
+        print 'self.pre_filtered.eval().shape', self.pre_filtered.eval().shape
+
         supervised_rate = self.learning_rate
-        delta_supervised = (supervised_rate * self.pre_filtered[None,:]
-                            * encoded_error[:,None])
+        delta_supervised = [(supervised_rate * self.pre_filtered[i][:,None] * 
+                             encoded_error[i]) for i in range(self.post.array_size)]
+
+        print 'delta_supervised', delta_supervised
 
         unsupervised_rate = TT.cast(
             self.learning_rate * self.scaling_factor, dtype='float32')
-        delta_unsupervised = (unsupervised_rate * self.pre_filtered[None,:]
-                              * (self.post_filtered
-                                 * (self.post_filtered-self.theta)
-                                 * self.gains)[:,None])
+        delta_unsupervised = [(unsupervised_rate * self.pre_filtered[i][None,:] * 
+                             (self.post_filtered * 
+                             (self.post_filtered - self.theta) * 
+                              self.gains)[i][:,None] ) for i in range(self.post.array_size)]
 
-        return (self.weight_matrix
+        print 'delta_unsupervised', delta_unsupervised
+        print 'self.weight_matrix.eval().shape', self.weight_matrix.eval().shape
+
+        change = (self.weight_matrix[0]
                 + TT.cast(self.supervision_ratio, 'float32') * delta_supervised
                 + TT.cast(1. - self.supervision_ratio, 'float32')
                 * delta_unsupervised)
+
+        change = TT.unbroadcast(change, 0)
+        print 'change.type', change.type
+
+        return change
         
     def update(self):
         # update filtered inputs
