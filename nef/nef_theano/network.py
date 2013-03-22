@@ -487,9 +487,6 @@ class Network(object):
                 # add it to the list of variables to update every time step
                 updates.update(node.update())
 
-        # for debugging
-        theano.config.compute_test_value = 'raise'
-
         # create graph and return optimized update function
         return theano.function([], [], updates=updates)
 
