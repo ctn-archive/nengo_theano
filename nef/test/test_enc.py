@@ -1,11 +1,14 @@
 """This is a file to test the encoders parameter on ensembles"""
 
 import math
+import time
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from .. import nef_theano as nef
+
+build_time_start = time.time()
 
 net = nef.Network('Encoder Test')
 net.make_input('in', math.sin)
@@ -26,8 +29,14 @@ Ap = net.make_probe(
 Bp = net.make_probe(
     net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
 
+build_time_end = time.time()
+
 print "starting simulation"
 net.run(timesteps * dt_step)
+
+sim_time_end = time.time()
+print "\nBuild time: %0.10fs" % (build_time_end - build_time_start)
+print "Sim time: %0.10fs" % (sim_time_end - build_time_end)
 
 plt.ioff(); plt.close()
 plt.subplot(311); plt.title('Input')
@@ -38,3 +47,4 @@ plt.subplot(313); plt.title('B')
 plt.plot(t, Bp.get_data())
 plt.tight_layout()
 plt.show()
+
