@@ -341,6 +341,14 @@ class Ensemble:
         # reshape to make it (array_size x neurons_num)
         learn_output = TT.reshape(learn_output, 
             (self.array_size, self.neurons_num))
+        learn_output = [TT.dot(
+            TT.reshape(pre.neurons.output[0], (1, pre.neurons_num)), 
+            learned_term.weight_matrix[i]) for i in range(self.array_size * pre.array_size)]
+        # learn_output should now be (array_size x neurons_num x 1)
+        # reshape to make it (array_size x neurons_num)
+        print 'learn_output', learn_output
+        learn_output = TT.reshape( learn_output, (self.array_size, 
+                                   self.neurons_num) )
 
         # add learn output to the accumulator to handle
         # the input_current from this connection during simulation

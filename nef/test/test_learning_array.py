@@ -124,3 +124,4 @@ for i in range(test_cases.shape[0]):
     plt.title('Normal learning')
     plt.tight_layout()
     plt.show()
+

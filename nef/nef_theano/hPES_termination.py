@@ -53,6 +53,8 @@ class hPESTermination(LearnedTermination):
         encoded_error = np.sum(self.encoders * TT.reshape( self.error_value, 
             (self.post.array_size, 1, self.post.dimensions)) , axis=-1)
 
+        print 'self.pre_filtered[0].eval().shape', self.pre_filtered[0].eval().shape
+        print 'post.array_size', self.post.array_size
         supervised_rate = self.learning_rate
         #TODO: more efficient rewrite with theano batch command? 
         delta_supervised = [
@@ -79,6 +81,7 @@ class hPESTermination(LearnedTermination):
                 + TT.cast(self.supervision_ratio, 'float32') * delta_supervised
                 + TT.cast(1. - self.supervision_ratio, 'float32')
                 * delta_unsupervised)
+        print 'new_wm.eval().shape', new_wm.eval().shape
 
         return new_wm
 
@@ -109,6 +112,9 @@ class hPESTermination(LearnedTermination):
         # update theta
         alpha = TT.cast(self.dt / self.theta_tau, dtype='float32')
         new_theta = self.theta + alpha * (new_post - self.theta)
+
+        print 'self.pre_filtered.eval().shape', self.pre_filtered.eval().shape
+        print 'new_pre.eval().shape', new_pre.eval().shape
 
         return collections.OrderedDict({
                 self.weight_matrix: self.learn(),
