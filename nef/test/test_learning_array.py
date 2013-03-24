@@ -15,15 +15,15 @@ net = nef.Network('Learning Test')
 net.make_input('in', value=0.8)
 timer = time.time()
 net.make('A', neurons=neurons, dimensions=1, array_size=1)
-net.make('B', neurons=neurons, dimensions=1, array_size=2)
-net.make('error1', neurons=neurons, dimensions=1)
+net.make('B', neurons=neurons, dimensions=2, array_size=2)
+net.make('error1', neurons=neurons, dimensions=4)
 print "Made populations:", time.time() - timer
 
 net.learn(pre='A', post='B', error='error1')
 
 net.connect('in', 'A')
 net.connect('A', 'error1')
-net.connect('B', 'error1', index_pre=0, weight=-1)
+net.connect('B', 'error1', weight=-1)
 
 t_final = 5
 dt_step = 0.01
@@ -48,7 +48,7 @@ t = np.linspace(0, t_final, len(Ap.get_data()))
 plt.plot(t, Ap.get_data())
 plt.plot(t, Bp.get_data())
 plt.plot(t, E1p.get_data())
-plt.legend(['A', 'B[0]', 'B[1]', 'error'])
+plt.legend(['A', 'B[0]', 'B[1]', 'B[2]'])
 plt.title('Normal learning')
 plt.tight_layout()
 plt.show()
