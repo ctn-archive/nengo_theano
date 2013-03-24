@@ -51,7 +51,9 @@ class hPESTermination(LearnedTermination):
 
     def learn(self):
         # get the error as represented by the post neurons
-        encoded_error = np.sum(self.encoders * self.error_value[None,:], axis=-1)
+        print 'self.error_value.eval().shape', self.error_value.eval().shape
+        print 'self.encoders.shape', self.encoders.shape
+        encoded_error = np.sum(self.encoders * TT.reshape(self.error_value, (self.post.array_size, 1, self.post.dimensions)) , axis=-1)
         print 'encoded_error.eval().shape', encoded_error.eval().shape
 
         print 'self.pre_filtered[0].eval().shape', self.pre_filtered[0].eval().shape
