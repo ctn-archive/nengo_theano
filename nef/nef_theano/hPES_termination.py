@@ -51,28 +51,39 @@ class hPESTermination(LearnedTermination):
 
     def learn(self):
         # get the error as represented by the post neurons
-        encoded_error = np.sum(self.encoders * self.error_value[None,:],
-                               axis=-1)
+        encoded_error = np.sum(self.encoders * self.error_value[None,:], axis=-1)
+        print 'encoded_error.eval().shape', encoded_error.eval().shape
 
+        print 'self.pre_filtered[0].eval().shape', self.pre_filtered[0].eval().shape
+        print 'post.array_size', self.post.array_size
         supervised_rate = self.learning_rate
-        delta_supervised = [(supervised_rate * self.pre_filtered[i][:,None] * 
+        #TODO: more efficient rewrite with theano batch command? 
+        delta_supervised = [(supervised_rate * self.pre_filtered[0][:,None] * 
                              encoded_error[i]) for i in range(self.post.array_size)]
 
         unsupervised_rate = TT.cast(
             self.learning_rate * self.scaling_factor, dtype='float32')
-        delta_unsupervised = [(unsupervised_rate * self.pre_filtered[i][None,:] * 
-                             (self.post_filtered * 
-                             (self.post_filtered - self.theta) * 
-                              self.gains)[i][:,None] ) for i in range(self.post.array_size)]
+        #TODO: more efficient rewrite with theano batch command? 
+        print 'theta.size', self.theta.eval().shape
+        print 'gains.shape', self.gains.shape
+        print 'post stuff', (self.post_filtered[0] * (self.post_filtered[0] - self.theta) * self.gains[0]).eval().shape
+        delta_unsupervised = [(unsupervised_rate * self.pre_filtered[0][None,:] * 
+                             (self.post_filtered[i] * 
+                             (self.post_filtered[i] - self.theta[i]) * 
+                              self.gains[i])[:,None] ) for i in range(self.post.array_size)] 
 
-        change = (self.weight_matrix[0]
+        print 'delta_supervised', delta_supervised
+        print 'delta_supervised[0].eval().shape', delta_supervised[0].eval().shape
+        print 'self.weight_matrix.eval().shape', self.weight_matrix.eval().shape
+        new_wm = (self.weight_matrix
                 + TT.cast(self.supervision_ratio, 'float32') * delta_supervised
                 + TT.cast(1. - self.supervision_ratio, 'float32')
                 * delta_unsupervised)
+        print 'new_wm.eval().shape', new_wm.eval().shape
 
-        change = TT.unbroadcast(change, 0)
+        #new_wm = TT.unbroadcast(new_wm, 0)
 
-        return change
+        return new_wm
         
     def update(self):
         # update filtered inputs
@@ -80,11 +91,14 @@ class hPESTermination(LearnedTermination):
         new_pre = self.pre_filtered + alpha * (
             self.pre_spikes.flatten() - self.pre_filtered)
         new_post = self.post_filtered + alpha * (
-            self.post_spikes.flatten() - self.post_filtered)
+            self.post_spikes - self.post_filtered)
 
         # update theta
         alpha = TT.cast(self.dt / self.theta_tau, dtype='float32')
         new_theta = self.theta + alpha * (new_post - self.theta)
+
+        print 'self.pre_filtered.eval().shape', self.pre_filtered.eval().shape
+        print 'new_pre.eval().shape', new_pre.eval().shape
 
         return collections.OrderedDict({
                 self.weight_matrix: self.learn(),
