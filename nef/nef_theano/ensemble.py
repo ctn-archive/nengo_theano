@@ -317,10 +317,12 @@ class Ensemble:
 
         learned_term = learned_termination_class(
             pre, self, error, weight_matrix)
-        learn_output = TT.dot(
-            pre.neurons.output, learned_term.weight_matrix.T)
+        learn_output = [TT.dot(
+            TT.reshape(pre.neurons.output[0], (1, pre.neurons_num)), 
+            learned_term.weight_matrix[i]) for i in range(self.array_size * pre.array_size)]
         # learn_output should now be (array_size x neurons_num x 1)
         # reshape to make it (array_size x neurons_num)
+        print 'learn_output', learn_output
         learn_output = TT.reshape( learn_output, (self.array_size, 
                                    self.neurons_num) )
 
@@ -406,19 +408,16 @@ class Ensemble:
                 # add its values directly to the input current 
                 J += a.new_learn_input
 
-        #TODO: optimize for when nothing is added to X
-        # (ie there are no decoded inputs)
-
-        # add to input current for each neuron as
-        # represented input signal x preferred direction
-        #TODO: use TT.batched_dot function here instead?
-
         assert not hasattr(self.encoders, 'type')
         # onlf do this if X is a theano object (i.e. there was decoded_input)
         if hasattr(X, 'type'):
             # XXX shared_encoders are *NOT* aliased to self.encoders in
             #     any way
             shared_encoders = theano.shared(self.encoders.astype(X.dtype))
+            
+            # add to input current for each neuron as
+            # represented input signal x preferred direction
+            #TODO: use TT.batched_dot function here instead?
             J = [J[i] + TT.dot(shared_encoders[i], X[i].T)
                  for i in range(self.array_size)]
 
