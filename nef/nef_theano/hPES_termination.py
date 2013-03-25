@@ -51,8 +51,6 @@ class hPESTermination(LearnedTermination):
 
     def learn(self):
         # get the error as represented by the post neurons
-        print 'self.error_value.eval().shape', self.error_value.eval().shape
-        print 'self.encoders.shape', self.encoders.shape
         encoded_error = np.sum(self.encoders * TT.reshape(self.error_value, (self.post.array_size, 1, self.post.dimensions)) , axis=-1)
         print 'encoded_error.eval().shape', encoded_error.eval().shape
 
@@ -60,8 +58,12 @@ class hPESTermination(LearnedTermination):
         print 'post.array_size', self.post.array_size
         supervised_rate = self.learning_rate
         #TODO: more efficient rewrite with theano batch command? 
-        delta_supervised = [(supervised_rate * self.pre_filtered[0][:,None] * 
-                             encoded_error[i]) for i in range(self.post.array_size)]
+        # np.ceil((i + 1) / float(self.post.array_size)) - 1 generates 0 post.array_size times, 
+        # then 1 post.array_size times, then 2 post.array_size times, etc
+        # so with pre.array_size = post.array_size = 2 
+        # we're connecting it up in order pre[0]-post[0], pre[0]-post[1], pre[1]-post[0], pre[1]-post[1]
+        delta_supervised = [(supervised_rate * (self.pre_filtered[int(np.ceil((i + 1) / float(self.post.array_size)) - 1)])[:,None] * 
+                             encoded_error[i % self.post.array_size]) for i in range(self.post.array_size * self.pre.array_size)]
 
         unsupervised_rate = TT.cast(
             self.learning_rate * self.scaling_factor, dtype='float32')
@@ -69,10 +71,11 @@ class hPESTermination(LearnedTermination):
         print 'theta.size', self.theta.eval().shape
         print 'gains.shape', self.gains.shape
         print 'post stuff', (self.post_filtered[0] * (self.post_filtered[0] - self.theta) * self.gains[0]).eval().shape
-        delta_unsupervised = [(unsupervised_rate * self.pre_filtered[0][None,:] * 
-                             (self.post_filtered[i] * 
-                             (self.post_filtered[i] - self.theta[i]) * 
-                              self.gains[i])[:,None] ) for i in range(self.post.array_size)] 
+        delta_unsupervised = [(unsupervised_rate * (self.pre_filtered[int(np.ceil((i + 1) / float(self.post.array_size)) - 1)])[None,:] * 
+                             (self.post_filtered[i % self.post.array_size] * 
+                             (self.post_filtered[i % self.post.array_size] - self.theta[i % self.post.array_size]) * 
+                              self.gains[i % self.post.array_size])[:,None]) \
+                              for i in range(self.post.array_size * self.pre.array_size)] 
 
         print 'delta_supervised', delta_supervised
         print 'delta_supervised[0].eval().shape', delta_supervised[0].eval().shape
@@ -91,7 +94,7 @@ class hPESTermination(LearnedTermination):
         # update filtered inputs
         alpha = TT.cast(self.dt / self.pstc, dtype='float32')
         new_pre = self.pre_filtered + alpha * (
-            self.pre_spikes.flatten() - self.pre_filtered)
+            self.pre_spikes - self.pre_filtered)
         new_post = self.post_filtered + alpha * (
             self.post_spikes - self.post_filtered)
 
