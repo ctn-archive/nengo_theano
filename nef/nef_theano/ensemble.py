@@ -346,9 +346,10 @@ class Ensemble:
             learned_term.weight_matrix[i]) for i in range(self.array_size * pre.array_size)]
         # learn_output should now be (array_size x neurons_num x 1)
         # reshape to make it (array_size x neurons_num)
-        print 'learn_output', learn_output
+        print 'learn_output.eval().shape', learn_output[0].eval().shape
         learn_output = TT.reshape( learn_output, (self.array_size, 
                                    self.neurons_num) )
+        print 'learn_output', learn_output
 
         # add learn output to the accumulator to handle
         # the input_current from this connection during simulation
