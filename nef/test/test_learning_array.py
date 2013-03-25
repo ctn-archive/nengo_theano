@@ -1,9 +1,25 @@
 """This is a test file to test learning with network arrays
+
+    Test cases:
+    1) pre.array_size=N, post.array_size=1, error.array_size=1
+    2) pre.array_size=1, post.array_size=N, error.array_size=1
+    3) pre.array_size=1, post.array_size=N, error.array_size=N
+    4) pre.array_size=N, post.array_size=N, error.array_size=N
+   
+    and for each of these
+    Test cases:
+        a) pre.dim=1, post.dim=1, error.dim=1
+        b) pre.dim=N, post.dim=1, error.dim=1
+        c) pre.dim=1, post.dim=N, error.dim=1
+        d) pre.dim=N, post.dim=1, error.dim=N
+        e) pre.dim=1, post.dim=N, error.dim=N
+        f) pre.dim=N, post.dim=N, error.dim=N
 """
 
 import math
 import time
 
+import itertools
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -11,44 +27,74 @@ from .. import nef_theano as nef
 
 neurons = 30  # number of neurons in all ensembles
 
-net = nef.Network('Learning Test')
-net.make_input('in', value=0.8)
-timer = time.time()
-net.make('A', neurons=neurons, dimensions=1, array_size=2)
-net.make('B', neurons=neurons, dimensions=1, array_size=2)
-net.make('error1', neurons=neurons, dimensions=2)
-print "Made populations:", time.time() - timer
+N = 2 # number of dimensions for multi-dimensional ensembles
+test_array_sizes = [ [N,1,1], [1,N,1], [N,1,N], [1,N,N], [N,N,N] ]
+test_dims = [ [1,1,1], [N,1,1], [1,N,1], [N,1,N], [1,N,N], [N,N,N] ]
+index_a = 0
+index_d = 1
 
-net.learn(pre='A', post='B', error='error1')
+# generate set of different array and dimension sizes to test
+test_cases = []
+for i in range(len(test_array_sizes)):
+    test_cases.extend([i]*len(test_dims))
+test_cases = np.array( [test_cases] + [range(0, len(test_dims)) * len(test_array_sizes)]).T
 
-net.connect('in', 'A')
-net.connect('A', 'error1')
-net.connect('B', 'error1', weight=-1)
+for i in range(test_cases.shape[0]):
+    test_case = test_cases[i+2]
+    net = nef.Network('Learning Test')
+    net.make_input('in', value=[0.8,-.5])
 
-t_final = 5
-dt_step = 0.01
-pstc = 0.03
+    timer = time.time()
 
-Ip = net.make_probe(
-    net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Ap = net.make_probe(
-    net.nodes['A'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Bp = net.make_probe(
-    net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-E1p = net.make_probe(net.nodes['error1'].origin['X'].decoded_output,
-                     dt_sample=dt_step, pstc=pstc)
+    net.make('A', neurons=neurons, 
+                  dimensions=test_dims[test_case[index_d]][0], 
+                  array_size=test_array_sizes[test_case[index_a]][0])
+    net.make('B', neurons=neurons, 
+                  dimensions=test_dims[test_case[index_d]][1],
+                  array_size=test_array_sizes[test_case[index_a]][1])
+    net.make('error', neurons=neurons, 
+                  dimensions=test_dims[test_case[index_d]][2], 
+                  array_size=test_array_sizes[test_case[index_a]][2])
 
-print "starting simulation"
-net.run(t_final)
+    print "Made populations:", time.time() - timer
 
-plt.ioff(); plt.close()
+    net.learn(pre='A', post='B', error='error')
 
-t = np.linspace(0, t_final, len(Ap.get_data()))
+    net.connect('in', 'A')
+    net.connect('A', 'error')
+    net.connect('B', 'error', weight=-1)
 
-plt.plot(t, Ap.get_data())
-plt.plot(t, Bp.get_data())
-plt.plot(t, E1p.get_data())
-plt.legend(['A', 'B[0]', 'B[1]', 'error[0]', 'error[1]'])
-plt.title('Normal learning')
-plt.tight_layout()
-plt.show()
+    t_final = 5
+    dt_step = 0.01
+    pstc = 0.03
+
+    Ip = net.make_probe(
+        net.nodes['in'].origin['X'].decoded_output,
+        dt_sample=dt_step, pstc=pstc)
+    Ap = net.make_probe(
+        net.nodes['A'].origin['X'].decoded_output, 
+        dt_sample=dt_step, pstc=pstc)
+    Bp = net.make_probe(
+        net.nodes['B'].origin['X'].decoded_output, 
+        dt_sample=dt_step, pstc=pstc)
+    E1p = net.make_probe(
+        net.nodes['error'].origin['X'].decoded_output,
+        dt_sample=dt_step, pstc=pstc)
+
+    print "starting simulation"
+
+    net.run(t_final)
+
+    plt.ioff(); plt.close()
+
+    t = np.linspace(0, t_final, len(Ap.get_data()))
+
+    plt.plot(t, Ap.get_data())
+    plt.plot(t, Bp.get_data())
+    plt.plot(t, E1p.get_data())
+    plt.legend(['A']*test_array_sizes[test_case[index_a]][0]*test_dims[test_case[index_d]][0] + 
+               ['B']*test_array_sizes[test_case[index_a]][1]*test_dims[test_case[index_d]][1] + 
+               ['error']*test_array_sizes[test_case[index_a]][2]*test_dims[test_case[index_d]][2] )
+    plt.title('Normal learning')
+    plt.tight_layout()
+    plt.show()
