@@ -310,6 +310,8 @@ class Ensemble:
             the initial connection weights with which to start
         
         """
+        #TODO: is there ever a case we wouldn't want this?
+        assert error.dimensions == self.dimensions * self.array_size
 
         # generate an initial weight matrix if none provided,
         # random numbers between -.001 and .001
@@ -320,16 +322,25 @@ class Ensemble:
                 low=-.001, high=.001)
         else:
             # make sure it's an np.array
+            #TODO: error checking to make sure it's the right size
             weight_matrix = np.array(weight_matrix) 
 
         learned_term = learned_termination_class(
             pre, self, error, weight_matrix)
-        learn_output = TT.dot(
-            pre.neurons.output, learned_term.weight_matrix.T)
-        # learn_output should now be (array_size x neurons_num x 1)
+
+        learn_projections = [TT.dot(
+            pre.neurons.output[learned_term.pre_index(i)],  
+            learned_term.weight_matrix[i % self.array_size]) 
+            for i in range(self.array_size * pre.array_size)]
+
+        # now want to sum all the output to each of the post ensembles 
+        # going to reshape and sum along the 0 axis
+        learn_output = TT.sum( 
+            TT.reshape(learn_projections, 
+            (pre.array_size, self.array_size, self.neurons_num)), axis=0)
         # reshape to make it (array_size x neurons_num)
-        learn_output = TT.reshape( learn_output, (self.array_size, 
-                                   self.neurons_num) )
+        learn_output = TT.reshape(learn_output, 
+            (self.array_size, self.neurons_num))
 
         # add learn output to the accumulator to handle
         # the input_current from this connection during simulation
@@ -413,19 +424,16 @@ class Ensemble:
                 # add its values directly to the input current 
                 J += a.new_learn_input
 
-        #TODO: optimize for when nothing is added to X
-        # (ie there are no decoded inputs)
-
-        # add to input current for each neuron as
-        # represented input signal x preferred direction
-        #TODO: use TT.batched_dot function here instead?
-
         assert not hasattr(self.encoders, 'type')
         # onlf do this if X is a theano object (i.e. there was decoded_input)
         if hasattr(X, 'type'):
             # XXX shared_encoders are *NOT* aliased to self.encoders in
             #     any way
             shared_encoders = theano.shared(self.encoders.astype(X.dtype))
+            
+            # add to input current for each neuron as
+            # represented input signal x preferred direction
+            #TODO: use TT.batched_dot function here instead?
             J = [J[i] + TT.dot(shared_encoders[i], X[i].T)
                  for i in range(self.array_size)]
 
