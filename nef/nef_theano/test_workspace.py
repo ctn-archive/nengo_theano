@@ -11,7 +11,6 @@ class StdMixins(object):
     def test_optimize(self):
         ws = self.foo[2]
         ws.optimize('fast_run')
-        theano.printing.debugprint(ws.compiled_updates['f'].ufgraph.fgraph.outputs)
 
 
 class SimpleGraph(unittest.TestCase, StdMixins):
@@ -68,14 +67,14 @@ class MergeableGraph(unittest.TestCase, StdMixins):
         ws[y] = [3, 4]
         f = ws.compile_update('f', [(x, 2 * x), (y, 2 * y)])
 
-        ws_opt = SharedStorageWorkspace(ws)
-        f_opt = ws_opt.compiled_updates['f']
-        self.foo = x, y, ws, ws_opt
+        ws_shrd = SharedStorageWorkspace(ws)
+        f_opt = ws_shrd.compiled_updates['f']
+        self.foo = x, y, ws, ws_shrd
 
     def tearDown(self):
-        x, y, ws, ws_opt = self.foo
+        x, y, ws, ws_shrd = self.foo
 
-        for w in (ws, ws_opt):
+        for w in (ws, ws_shrd):
             assert np.allclose([w[x], w[y]],[[1, 2], [3, 4]])
             w.run_update('f')
             assert np.allclose([w[x], w[y]],[[2, 4], [6, 8]])
@@ -83,7 +82,12 @@ class MergeableGraph(unittest.TestCase, StdMixins):
             assert np.allclose([w[x], w[y]],[[4, 8], [12, 16]])
 
     def test_merged(self):
-        ws, ws_opt = self.foo[2:]
+        ws, ws_shrd = self.foo[2:]
         assert len(ws.vals_memo) == 2
-        assert len(ws_opt.vals_memo) == 1
+        assert len(ws_shrd.vals_memo) == 1
 
+    def test_computation_merged(self):
+
+        ws_shrd = self.foo[3]
+        ws_shrd.optimize('fast_run')
+        theano.printing.debugprint(ws_shrd.compiled_updates['f'].ufgraph.fgraph.outputs)

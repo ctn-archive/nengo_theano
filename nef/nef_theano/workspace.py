@@ -19,7 +19,7 @@ def optimizer_from_any(specifier):
                 specifier, dct))
         return theano.compile.mode.optdb.query(query)
     else:
-        # XXX probably not implemented error is more appropriate
+        # TODO probably not implemented error is more appropriate
         raise TypeError(specifier)
 
 
@@ -129,11 +129,29 @@ class CompiledUpdate(object):
 
 class Workspace(object):
     """
+
+    This workspace is meant to be serializable, at least before it has been
+    optimized.
+
+    Recommended workflow for many repeated evaluations (pre-profile-driven
+    optimization engine):
+    1. build this type of workspace to define a function system
+    2. use it to initialize a SharedStorageWorkspace, which will optimize the
+       memory layout.
+    3. call ws.optimize() on the SharedStorageWorkspace to optimize the
+       computational graph for the optimized physical layout.
+    4. run the optimized function system many times, it is the fastest.
+    5. when it comes time to save, call ws.update(fast_ws) to bring the values
+       back from the fast workspace to the original (slow) one, and save the
+       slow one.
     """
 
     def __init__(self):
         self.vals_memo = {}
         self.compiled_updates = {}
+
+    def __iter__(self):
+        return self.vals_memo.keys()
 
     def __contains__(self, key):
         return key in self.vals_memo
@@ -148,6 +166,13 @@ class Workspace(object):
         else:
             self.vals_memo[key] = [filtered_val]
 
+    def update(self, other):
+        for key in other:
+            self[key] = other[key]
+
+    # XXX unfortunate name!
+    # -- since Workspace is like a value dictionary, "update" is defined by
+    #    Python convention to mean a dictionary update.
     def compile_update(self, key, updated_vars, optimizer=None):
         """
 
@@ -228,54 +253,185 @@ class SharedStorageWorkspace(Workspace):
                 self.vals_memo[key] = [filtered_val]
 
     def compile_update(self, key, updated_vars):
-        new_s_fvector = self.s_fvector
-        no_view_updated_vars = []
+        noview_updated_vars = dict() #XXX want ordered-dict here
         for dst, out in updated_vars:
             if dst in self.views_memo:
                 var, offset, n_elems = self.views_memo[dst]
-                assert var is self.s_fvector # XXX HACK
-                new_s_fvector = theano.tensor.set_subtensor(
-                        new_s_fvector[offset: offset + n_elems],
+                upvar = theano.tensor.set_subtensor(
+                        noview_updated_vars.get(var, var)[
+                            offset: offset + n_elems],
                         out)
+                noview_updated_vars[var] = upvar
             else:
-                no_view_updated_vars.append((dst, out))
-
-        if new_s_fvector != self.s_fvector:
-            no_view_updated_vars.append((self.s_fvector,
-                new_s_fvector))
+                if dst in noview_updated_vars:
+                    raise ValueError('duplicate destination', updated_vals)
+                noview_updated_vars[dst] = out
 
         givens = []
         for var in self.views_memo:
             svar, offset, n_elems = self.views_memo[var]
             givens.append((var, svar[offset: offset + n_elems]))
 
-        ufgraph = UpdateFGraph(no_view_updated_vars, givens=givens)
+        ufgraph = UpdateFGraph(noview_updated_vars.items(), givens=givens)
         cu = CompiledUpdate(ufgraph, self.vals_memo)
-        #cu = CompiledUpdate(no_view_updated_vars, self.vals_memo,
-                #givens=givens)
         self.compiled_updates[key] = cu
         return cu
 
 
-class Function(Workspace):
+class Function(object):
     """
     Special case of Workspace for implementing a single callable expression
 
     TODO: Provides support for structuring outputs as nested list, dict, etc.
     """
-    def __init__(self, inputs, outputs):
+    # XXX COMPLETELY UNTESTED
+    def __init__(self, ws, inputs, outputs, dests, fn_name):
+        self._ws = ws
         self._inputs = inputs
         self._outputs = outputs
-        self._dests = [o.type() for o in outputs]
-        for var in self._inputs + _self.dests:
-            self[var] = None
-        self.add_compiled_update('__call__', zip(self._dests, self._outputs))
+        self._dests = dests
+        self._fn_name = fn_name
 
     def __call__(self, *args):
         assert len(self._inputs) == len(args)
         for var, val in zip(self._inputs, args):
-            self[var] = val
-        self.compiled_updates['__call__']()
+            self._ws[var] = val
+        self._ws.compiled_updates[self._fn_name]()
+        # TODO: unflatten dictionaries, singles, nested stuff, etc.
         return [self[var] for var in self._dests]
 
+
+def function(inputs, outputs, ws_cls=Workspace):
+    # XXX COMPLETELY UNTESTED
+    ws = ws_cls()
+    dests = [o.type() for o in outputs]
+    for var in inputs + dests:
+        ws[var] = None
+    ws.add_compiled_update('__call__', zip(dests, outputs))
+    return Function(ws, inputs, outputs, dests, '__call__')
+
+
+from theano.tensor.opt import register_canonicalize
+from theano.tensor.blas import Optimizer
+
+class RefactorSubtensors(Optimizer):
+    """
+    op(x[a:b]), op(x[b:c]) -> A = op(x[a:c]), A[0:b-a], A[b-a:c-a]
+
+    When some elementwise operation is applied separately to neighbouring
+    parts of a tensor, this optimization rearranges things so that the
+    elementwise operation is only applied once, and the result is split.
+    """
+
+    def add_requirements(self, fgraph):
+        fgraph.attach_feature(theano.gof.toolbox.ReplaceValidate())
+
+    def apply(self, fgraph):
+        nb_iter = 0
+        nb_replacement = 0
+        nb_replacement_didn_t_remove = 0
+        nb_inconsistency_make = 0
+        nb_inconsistency_replace = 0
+        time_canonicalize = 0
+        time_factor_can = 0
+        time_factor_list = 0
+        time_toposort = 0
+
+        did_something = True
+        print '-- START -- '
+
+        Subtensor = theano.tensor.Subtensor
+
+        while did_something:
+            did_something = False
+            nb_iter += 1
+            print 'NEW LOOP'
+
+            subtensors = [n for n in fgraph.toposort()
+                    if isinstance(n.op, Subtensor)]
+
+            xs_with_subtensor = {}
+            for n in subtensors:
+                xs_with_subtensor.setdefault(n.inputs[0], []).append(n)
+
+            for x, subtensor_clients in xs_with_subtensor.items():
+                if did_something:
+                    break
+                if len(subtensor_clients) > 1:
+                    # -- potentially merge the subtensor clients of x
+                    if any(len(n.inputs) > 1 for n in subtensor_clients):
+                        # -- TODO: support non-constant indexing ranges
+                        continue
+
+                    if all(((len(n.op.idx_list) == 1)
+                            and isinstance(n.op.idx_list[0], slice)
+                            and isinstance(n.op.idx_list[0].start, int)
+                            and isinstance(n.op.idx_list[0].stop, int)
+                            and n.op.idx_list[0].step == None
+                            )
+                            for n in subtensor_clients):
+                        ranges = [
+                            (n.op.idx_list[0].start, n.op.idx_list[0].stop, n)
+                            for n in subtensor_clients]
+                        ranges.sort()
+                        assert len(ranges) > 1
+                        if ranges[0][0] != 0:
+                            raise NotImplementedError()
+                            # XXX: remember to revise indexing below to be
+                            # relative to new vector, so that it will work
+                            # when ranges[0].start != 0
+
+                        # -- check if the selection range boundaries match up
+                        # TODO: consider merging *some* of the subtensor clients
+                        if all(r0[1] == r1[0]
+                                for r0, r1 in zip(ranges[:-1], ranges[1:])):
+                            print 'potentially merge', x, ranges
+                            replacements = []
+                            to_go = set()
+                            # -- check for common operations on these slices.
+                            # TODO: check for *some* matches
+                            for start, stop, subt_node in ranges:
+                                for client_apply, pos_in_client in subt_node.outputs[0].clients:
+                                    if len(client_apply.outputs) > 1:
+                                        raise NotImplementedError()
+                                    client_op = client_apply.op
+                                    if isinstance(client_op, theano.tensor.Elemwise):
+                                        new_inputs = list(client_apply.inputs)
+                                        # XXX: need to simultaneously replace
+                                        # all new_inputs that our subtensor
+                                        # merge is going to affect. If we are
+                                        # merging e.g.
+                                        #   add(x[1:2], y[1:2])
+                                        #   add(x[2:4], y[2:4])
+                                        #   -> add(x[1:4], y[1:4])[0:1]
+                                        #      add(x[1:4], y[1:4])[1:3]
+                                        # then we need to replace both of
+                                        # x and y.
+
+                                        new_inputs[pos_in_client] = x
+                                        new_out = client_op(*new_inputs)[start:stop]
+                                        replacements.append((client_apply.outputs[0], new_out))
+                                        assert client_apply.outputs[0] not in to_go
+                                        to_go.add(client_apply.outputs[0])
+                            print 'Replacements', replacements
+                            fgraph.replace_all_validate(replacements,
+                                reason='RefactorSubtensors')
+                            nb_replacement += len(replacements)
+                            did_something = True
+                        else:
+                            print 'clients did not match up'
+                    else:
+                        # -- TODO: match up other kinds of indexing
+                        continue
+
+        theano.printing.debugprint(fgraph.outputs)
+        print '-- DONE -- '
+        return (self, nb_iter, nb_replacement, nb_replacement_didn_t_remove,
+                nb_inconsistency_make, nb_inconsistency_replace,
+                time_canonicalize, time_factor_can,
+                time_factor_list, time_toposort)
+
+theano.compile.mode.optdb.register('refactor_subtensors',
+        RefactorSubtensors(),
+        0, 'fast_compile', 'fast_run')
 
