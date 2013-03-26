@@ -303,6 +303,8 @@ class Ensemble:
             the initial connection weights with which to start
         
         """
+        #TODO: is there ever a case we wouldn't want this?
+        assert error.dimensions == self.dimensions * self.array_size
 
         # generate an initial weight matrix if none provided,
         # random numbers between -.001 and .001
@@ -313,27 +315,25 @@ class Ensemble:
                 low=-.001, high=.001)
         else:
             # make sure it's an np.array
+            #TODO: error checking to make sure it's the right size
             weight_matrix = np.array(weight_matrix) 
 
         learned_term = learned_termination_class(
             pre, self, error, weight_matrix)
 
-        # np.ceil((i + 1) / float(self.post.array_size)) - 1 generates 0 post.array_size times, 
-        # then 1 post.array_size times, then 2 post.array_size times, etc
-        # so with pre.array_size = post.array_size = 2 
-        # we're connecting it up in order pre[0]-post[0], pre[0]-post[1], pre[1]-post[0], pre[1]-post[1]
         learn_projections = [TT.dot(
-            pre.neurons.output[int(np.ceil((i + 1) / float(self.array_size)) - 1)],  
-            learned_term.weight_matrix[i % self.array_size]) for i in range(self.array_size * pre.array_size)]
+            pre.neurons.output[learned_term.pre_index(i)],  
+            learned_term.weight_matrix[i % self.array_size]) 
+            for i in range(self.array_size * pre.array_size)]
+
         # now want to sum all the output to each of the post ensembles 
         # going to reshape and sum along the 0 axis
-        learn_output = TT.sum( TT.reshape( learn_projections, (pre.array_size, self.array_size, self.neurons_num) ), axis=0)
-        # learn_output should now be (array_size x neurons_num x 1)
+        learn_output = TT.sum( 
+            TT.reshape(learn_projections, 
+            (pre.array_size, self.array_size, self.neurons_num)), axis=0)
         # reshape to make it (array_size x neurons_num)
-        print 'learn_output.eval().shape', learn_output[0].eval().shape
-        learn_output = TT.reshape( learn_output, (self.array_size, 
-                                   self.neurons_num) )
-        print 'learn_output', learn_output
+        learn_output = TT.reshape(learn_output, 
+            (self.array_size, self.neurons_num))
 
         # add learn output to the accumulator to handle
         # the input_current from this connection during simulation
