@@ -9,6 +9,20 @@ from theano.compile import deep_copy_op
 from theano.compile.pfunc import rebuild_collect_shared
 
 
+def optimizer_from_any(specifier):
+    if isinstance(specifier, basestring):
+        try:
+            dct = theano.compile.mode.predefined_optimizers
+            query = dct[specifier]
+        except KeyError:
+            raise ValueError('Optimizer %s not in %s' % (
+                specifier, dct))
+        return theano.compile.mode.optdb.query(query)
+    else:
+        # XXX probably not implemented error is more appropriate
+        raise TypeError(specifier)
+
+
 class UpdateFGraph(object):
     def __init__(self, updated_vars, givens=None):
         """
@@ -134,7 +148,7 @@ class Workspace(object):
         else:
             self.vals_memo[key] = [filtered_val]
 
-    def compile_update(self, key, updated_vars):
+    def compile_update(self, key, updated_vars, optimizer=None):
         """
 
         Return a function that will update this workspaces
@@ -142,12 +156,21 @@ class Workspace(object):
 
         """
         ufgraph = UpdateFGraph(updated_vars)
+        if optimizer:
+            ufgraph.optimize(optimizer)
         cu = CompiledUpdate(ufgraph, self.vals_memo)
         self.compiled_updates[key] = cu
         return cu
 
     def run_update(self, key):
         self.compiled_updates[key]()
+
+    def optimize(self, specifier):
+        optimizer = optimizer_from_any(specifier)
+        for key, cu in self.compiled_updates.items():
+            optimizer.apply(cu.ufgraph.fgraph)
+            cu_opt = CompiledUpdate(cu.ufgraph, self.vals_memo)
+            self.compiled_updates[key] = cu_opt
 
 
 class SharedStorageWorkspace(Workspace):
