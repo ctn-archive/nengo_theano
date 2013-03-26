@@ -22,11 +22,10 @@ class EnsembleOrigin(Origin):
         
         """
         self.ensemble = ensemble
-        self.decoders = self.compute_decoders(func, eval_points)
+        func_size = self.compute_decoders(func, eval_points) # sets up self.decoders
         # decoders is array_size * neurons_num * func_dimensions, 
         # initial value should have array_size values * func_dimensions
-        initial_value = np.zeros(
-            self.ensemble.array_size * self.decoders.shape[2]) 
+        initial_value = np.zeros(self.ensemble.array_size * func_size) 
         Origin.__init__(self, func=func, initial_value=initial_value)
     
     def compute_decoders(self, func, eval_points=None):     
@@ -75,9 +74,10 @@ class EnsembleOrigin(Origin):
 
             # this ensures that we accurately capture the shape of the
             # function when the radius is > 1 (think for example func=x**2)
-            target_values = (np.array([func(s * self.ensemble.radius)
-                                      for s in eval_points.T])
-                             / self.ensemble.radius)
+            target_values = \
+                (np.array(
+                    [func(s * self.ensemble.radius) for s in eval_points.T]
+                    ) / self.ensemble.radius )
             if len(target_values.shape) < 2:
                 target_values.shape = target_values.shape[0], 1
             target_values = target_values.T
@@ -139,7 +139,9 @@ class EnsembleOrigin(Origin):
             # compute decoders - least squares method 
             decoders[index] = np.dot(Ginv, U) / (self.ensemble.neurons.dt)
 
-        return decoders.astype('float32')
+        self.decoders = theano.shared(decoders.astype('float32'), 
+            name='ensemble_origin.decoders')
+        return target_values.shape[0]
 
     def make_samples(self):
         """Generate sample points uniformly distributed within the sphere.
@@ -180,12 +182,12 @@ class EnsembleOrigin(Origin):
 
         # XXX shared_decoders are *NOT* aliased to self.decoders in
         #     any way
-        shared_decoders = theano.shared(self.decoders.astype(spikes.dtype))
+        #shared_decoders = theano.shared(self.decoders.astype(spikes.dtype))
 
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range
         decoded_output = TT.concatenate(
-            [TT.flatten(TT.dot(spikes[i], shared_decoders[i]))
+            [TT.flatten(TT.dot(spikes[i], self.decoders[i]))
              for i in range(self.ensemble.array_size)])
         decoded_output = TT.mul(
             decoded_output, self.ensemble.radius).astype('float32')
