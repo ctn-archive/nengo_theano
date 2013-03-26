@@ -49,17 +49,12 @@ def test_merge_1():
     ws_opt = SharedStorageWorkspace(ws)
     f_opt = ws_opt.compiled_updates['f']
 
-    print f_opt.order
+    assert len(ws.vals_memo) == 2
+    assert len(ws_opt.vals_memo) == 1
 
-    assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]])
-    ws.run_update('f')
-    assert np.allclose([ws[x], ws[y]],[[2, 4], [6, 8]])
-    ws.run_update('f')
-    assert np.allclose([ws[x], ws[y]],[[4, 8], [12, 16]])
-
-    assert np.allclose([ws_opt[x], ws_opt[y]],[[1, 2], [3, 4]])
-    ws_opt.run_update('f')
-    assert np.allclose([ws_opt[x], ws_opt[y]],[[2, 4], [6, 8]])
-    ws_opt.run_update('f')
-    assert np.allclose([ws_opt[x], ws_opt[y]],[[4, 8], [12, 16]])
-
+    for w in (ws, ws_opt):
+        assert np.allclose([w[x], w[y]],[[1, 2], [3, 4]])
+        w.run_update('f')
+        assert np.allclose([w[x], w[y]],[[2, 4], [6, 8]])
+        w.run_update('f')
+        assert np.allclose([w[x], w[y]],[[4, 8], [12, 16]])
