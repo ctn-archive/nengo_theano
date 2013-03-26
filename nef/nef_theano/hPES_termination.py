@@ -22,7 +22,7 @@ class hPESTermination(LearnedTermination):
         super(hPESTermination, self).__init__(*args, **kwargs)
 
         # get the theano instantaneous spike raster
-        # of the pre(post)-synaptic neurons
+        # of the pre- and post-synaptic neurons
         self.pre_spikes = self.pre.neurons.output
         self.post_spikes = self.post.neurons.output
         # get the decoded error signal
@@ -33,10 +33,9 @@ class hPESTermination(LearnedTermination):
         self.gains = np.sqrt(
             (self.post.encoders ** 2).sum(axis=-1)).astype('float32')
 
-        self.initial_theta = np.random.uniform(
-            low=5e-5, high=15e-5,
-            size=(self.post.array_size, self.post.neurons_num)).astype('float32')
-        # Trevor's assumption: high gain -> high theta
+        self.initial_theta = np.float32(np.random.uniform(low=5e-5, high=15e-5,
+            size=(self.post.array_size, self.post.neurons_num)))
+        # Assumption: high gain -> high theta
         self.initial_theta *= self.gains
         self.theta = theano.shared(self.initial_theta, name='hPES.theta')
 
@@ -51,44 +50,53 @@ class hPESTermination(LearnedTermination):
 
     def learn(self):
         # get the error as represented by the post neurons
-        encoded_error = np.sum(self.encoders * TT.reshape(self.error_value, (self.post.array_size, 1, self.post.dimensions)) , axis=-1)
-        print 'encoded_error.eval().shape', encoded_error.eval().shape
+        encoded_error = np.sum(self.encoders * TT.reshape( self.error_value, 
+            (self.post.array_size, 1, self.post.dimensions)) , axis=-1)
 
-        print 'self.pre_filtered[0].eval().shape', self.pre_filtered[0].eval().shape
-        print 'post.array_size', self.post.array_size
         supervised_rate = self.learning_rate
         #TODO: more efficient rewrite with theano batch command? 
-        # np.ceil((i + 1) / float(self.post.array_size)) - 1 generates 0 post.array_size times, 
-        # then 1 post.array_size times, then 2 post.array_size times, etc
-        # so with pre.array_size = post.array_size = 2 
-        # we're connecting it up in order pre[0]-post[0], pre[0]-post[1], pre[1]-post[0], pre[1]-post[1]
-        delta_supervised = [(supervised_rate * (self.pre_filtered[int(np.ceil((i + 1) / float(self.post.array_size)) - 1)])[:,None] * 
-                             encoded_error[i % self.post.array_size]) for i in range(self.post.array_size * self.pre.array_size)]
+        delta_supervised = [
+            supervised_rate * 
+            self.pre_filtered[self.pre_index(i)][None,:] *
+            encoded_error[i % self.post.array_size]
+            for i in range(self.post.array_size * self.pre.array_size) ]
 
         unsupervised_rate = TT.cast(
             self.learning_rate * self.scaling_factor, dtype='float32')
         #TODO: more efficient rewrite with theano batch command? 
-        print 'theta.size', self.theta.eval().shape
-        print 'gains.shape', self.gains.shape
-        print 'post stuff', (self.post_filtered[0] * (self.post_filtered[0] - self.theta) * self.gains[0]).eval().shape
-        delta_unsupervised = [(unsupervised_rate * (self.pre_filtered[int(np.ceil((i + 1) / float(self.post.array_size)) - 1)])[None,:] * 
-                             (self.post_filtered[i % self.post.array_size] * 
-                             (self.post_filtered[i % self.post.array_size] - self.theta[i % self.post.array_size]) * 
-                              self.gains[i % self.post.array_size])[:,None]) \
-                              for i in range(self.post.array_size * self.pre.array_size)] 
+        delta_unsupervised = [
+            unsupervised_rate * self.pre_filtered[self.pre_index(i)][None,:] *
+            ( 
+                self.post_filtered[i % self.post.array_size] * 
+                ( 
+                    self.post_filtered[i % self.post.array_size] - 
+                    self.theta[i % self.post.array_size] 
+                ) * 
+                self.gains[i % self.post.array_size] 
+            ) for i in range(self.post.array_size * self.pre.array_size) ]
 
-        print 'delta_supervised', delta_supervised
-        print 'delta_supervised[0].eval().shape', delta_supervised[0].eval().shape
-        print 'self.weight_matrix.eval().shape', self.weight_matrix.eval().shape
         new_wm = (self.weight_matrix
                 + TT.cast(self.supervision_ratio, 'float32') * delta_supervised
                 + TT.cast(1. - self.supervision_ratio, 'float32')
                 * delta_unsupervised)
-        print 'new_wm.eval().shape', new_wm.eval().shape
-
-        #new_wm = TT.unbroadcast(new_wm, 0)
 
         return new_wm
+
+    def pre_index(self, i): 
+        """This method calculates the index of the pre-synaptic ensemble
+        that should be accessed given a current index value i
+
+        int(np.ceil((i + 1) / float(self.post.array_size)) - 1)
+        generates 0 post.array_size times, then 1 post.array_size times, 
+        then 2 post.array_size times, etc so with 
+        pre.array_size = post.array_size = 2 we're connecting it up in order 
+        [pre[0]-post[0], pre[0]-post[1], pre[1]-post[0], pre[1]-post[1]]
+
+        :param int i: the current index value, 
+            value from 0 to post.array_size * pre.array_size
+        :returns: the desired pre-synaptic ensemble index
+        """
+        return int(np.ceil((i + 1) / float(self.post.array_size)) - 1)
         
     def update(self):
         # update filtered inputs
@@ -101,9 +109,6 @@ class hPESTermination(LearnedTermination):
         # update theta
         alpha = TT.cast(self.dt / self.theta_tau, dtype='float32')
         new_theta = self.theta + alpha * (new_post - self.theta)
-
-        print 'self.pre_filtered.eval().shape', self.pre_filtered.eval().shape
-        print 'new_pre.eval().shape', new_pre.eval().shape
 
         return collections.OrderedDict({
                 self.weight_matrix: self.learn(),

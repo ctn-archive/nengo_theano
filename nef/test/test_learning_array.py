@@ -26,10 +26,20 @@ import matplotlib.pyplot as plt
 from .. import nef_theano as nef
 
 neurons = 30  # number of neurons in all ensembles
-
 N = 2 # number of dimensions for multi-dimensional ensembles
-test_array_sizes = [ [N,1,1], [1,N,1], [N,1,N], [1,N,N], [N,N,N] ]
-test_dims = [ [1,1,1], [N,1,1], [1,N,1], [N,1,N], [1,N,N], [N,N,N] ]
+
+test_array_sizes = [[N,1,1], 
+                    [1,N,1], 
+                    [N,1,N], 
+                    [1,N,N], 
+                    [N,N,N] ]
+
+test_dims =        [[1,1,1], 
+                    [N,1,1], 
+                    [1,N,1], 
+                    [N,1,N], 
+                    [1,N,N], 
+                    [N,N,N] ]
 index_a = 0
 index_d = 1
 
@@ -37,24 +47,40 @@ index_d = 1
 test_cases = []
 for i in range(len(test_array_sizes)):
     test_cases.extend([i]*len(test_dims))
-test_cases = np.array( [test_cases] + [range(0, len(test_dims)) * len(test_array_sizes)]).T
+test_cases = np.array( [test_cases] + 
+                       [range(0, len(test_dims)) * 
+                       len(test_array_sizes)] ).T
 
 for i in range(test_cases.shape[0]):
-    test_case = test_cases[i+2]
+    test_case = test_cases[i]
+
+    array_sizes = test_array_sizes[test_case[index_a]]
+    dims = test_dims[test_case[index_d]]
+    
+    # make sure that error dims == post dims
+    if array_sizes[1] * dims[1] != array_sizes[2] * dims[2]:
+        continue # if not, skip it, it's an invalid test case
+        
+    print 
+    print 'test_case', test_case
+    print 'test_array_size', array_sizes
+    print 'test_dim', dims
+    print
+
     net = nef.Network('Learning Test')
     net.make_input('in', value=[0.8,-.5])
 
     timer = time.time()
 
     net.make('A', neurons=neurons, 
-                  dimensions=test_dims[test_case[index_d]][0], 
-                  array_size=test_array_sizes[test_case[index_a]][0])
+                  dimensions=dims[0], 
+                  array_size=array_sizes[0])
     net.make('B', neurons=neurons, 
-                  dimensions=test_dims[test_case[index_d]][1],
-                  array_size=test_array_sizes[test_case[index_a]][1])
+                  dimensions=dims[1],
+                  array_size=array_sizes[1])
     net.make('error', neurons=neurons, 
-                  dimensions=test_dims[test_case[index_d]][2], 
-                  array_size=test_array_sizes[test_case[index_a]][2])
+                  dimensions=dims[2], 
+                  array_size=array_sizes[2])
 
     print "Made populations:", time.time() - timer
 
@@ -92,9 +118,9 @@ for i in range(test_cases.shape[0]):
     plt.plot(t, Ap.get_data())
     plt.plot(t, Bp.get_data())
     plt.plot(t, E1p.get_data())
-    plt.legend(['A']*test_array_sizes[test_case[index_a]][0]*test_dims[test_case[index_d]][0] + 
-               ['B']*test_array_sizes[test_case[index_a]][1]*test_dims[test_case[index_d]][1] + 
-               ['error']*test_array_sizes[test_case[index_a]][2]*test_dims[test_case[index_d]][2] )
+    plt.legend( ['A'] * array_sizes[0] * dims[0] + 
+                ['B'] * array_sizes[1] * dims[1] + 
+                ['error'] * array_sizes[2] * dims[2] )
     plt.title('Normal learning')
     plt.tight_layout()
     plt.show()
