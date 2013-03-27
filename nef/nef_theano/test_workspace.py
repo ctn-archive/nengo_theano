@@ -29,11 +29,11 @@ class SimpleGraph(unittest.TestCase, StdMixins):
     def tearDown(self):
         x, y, ws = self.foo
 
-        assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]])
+        assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]]), (ws[x], ws[y])
         ws.run_update('f')
-        assert np.allclose([ws[x], ws[y]],[[2, 4], [4, 6]])
+        assert np.allclose([ws[x], ws[y]],[[2, 4], [4, 6]]), (ws[x], ws[y])
         ws.run_update('f')
-        assert np.allclose([ws[x], ws[y]],[[4, 8], [6, 10]])
+        assert np.allclose([ws[x], ws[y]],[[4, 8], [6, 10]]), (ws[x], ws[y])
 
 
 class SwapGraph(unittest.TestCase, StdMixins):
@@ -49,11 +49,11 @@ class SwapGraph(unittest.TestCase, StdMixins):
 
     def tearDown(self):
         x, y, ws = self.foo
-        assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]])
+        assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]]), (ws[x], ws[y])
         ws.run_update('f')
-        assert np.allclose([ws[x], ws[y]],[[3, 4], [1, 2]])
+        assert np.allclose([ws[x], ws[y]],[[3, 4], [1, 2]]), (ws[x], ws[y])
         ws.run_update('f')
-        assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]])
+        assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]]), (ws[x], ws[y])
 
 
 class MergeableGraph(unittest.TestCase, StdMixins):
