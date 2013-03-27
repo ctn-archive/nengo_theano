@@ -98,7 +98,7 @@ class EnsembleOrigin(Origin):
                 Ginv, A = data
             else:
                 # compute the input current for every neuron and every sample point
-                J = np.dot(self.ensemble.encoders[index], eval_points)
+                J = TT.dot(self.ensemble.encoders[index], eval_points)
                 J += self.ensemble.bias[index][:, np.newaxis]
 
                 # so in parallel we can calculate the activity

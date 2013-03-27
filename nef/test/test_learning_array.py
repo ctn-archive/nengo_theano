@@ -109,7 +109,9 @@ for i in range(test_cases.shape[0]):
 
     print "starting simulation"
 
+    start_time = time.time()
     net.run(t_final)
+    print 'Simulated in ', time.time() - start_time, 'seconds'
 
     plt.ioff(); plt.close()
 
