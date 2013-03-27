@@ -60,12 +60,13 @@ class SwapGraph(unittest.TestCase, StdMixins):
         assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]]), (ws[x], ws[y])
 
 
-class MergeableGraph(unittest.TestCase, StdMixins):
+class MergeGraph(unittest.TestCase, StdMixins):
     n_groups = 2
     n_items = 2
     def setUp(self):
         letters = 'xyzabcdefghijklmnopqrstuvw'
         symbols = [tensor.vector(a) for a in letters[:self.n_groups]]
+        assert len(symbols) == self.n_groups
 
         ws = Workspace()
         for i, s in enumerate(symbols):
@@ -80,24 +81,55 @@ class MergeableGraph(unittest.TestCase, StdMixins):
         letters, symbols, ws, ws_shrd = self.foo
 
         for w in (ws, ws_shrd):
+            # -- copy the variables
+            ivals = [np.array(w[s]) for s in symbols]
             for i, s in enumerate(symbols):
-                assert np.allclose(w[s], range(i, i + self.n_items))
+                assert np.allclose(w[s], ivals[i])
             w.run_update('f')
             for i, s in enumerate(symbols):
-                assert np.allclose(w[s], 2 * np.arange(i, i + self.n_items))
+                assert np.allclose(w[s], 2 * ivals[i]), (w[s], 2 * ivals[i])
+            w.run_update('f')
+            for i, s in enumerate(symbols):
+                assert np.allclose(w[s], 4 * ivals[i]), (w[s], 4 * ivals[i])
 
-    def test_merged(self):
+    def test_storage_merged(self):
         ws, ws_shrd = self.foo[2:]
-        assert len(ws.vals_memo) == self.n_groups
-        assert len(ws_shrd.vals_memo) == 1
+        assert len(ws.vals_memo) == self.n_groups, len(ws.vals_memo)
+        assert len(ws_shrd.vals_memo) == 1, len(ws_shrd.vals_memo)
 
     def test_computation_merged(self):
-
         ws_shrd = self.foo[3]
         ws_shrd.optimize('fast_run')
-        theano.printing.debugprint(ws_shrd.compiled_updates['f'].ufgraph.fgraph.outputs)
+        fgraph = ws_shrd.compiled_updates['f'].ufgraph.fgraph
+        theano.printing.debugprint(fgraph.outputs)
+        assert len(fgraph.toposort()) <= 4, len(fgraph.toposort())
+
+    def test_timeit(self):
+        import time
+        ws, ws_shrd = self.foo[2:]
+        ws.optimize('fast_run')
+        ws_shrd.optimize('fast_run')
+        def time_ws(w):
+            times = []
+            for i in range(100):
+                t0 = time.time()
+                w.run_update('f')
+                t1 = time.time()
+                times.append(t1 - t0)
+            return times
+        ws_times = time_ws(ws)
+        ws_shrd_times = time_ws(ws_shrd)
+        print 'n_groups=%s n_items=%s orig min %f' % (
+                self.n_groups, self.n_items, min(ws_times))
+        print 'n_groups=%s n_items=%s orig min %f' % (
+                self.n_groups, self.n_items, min(ws_shrd_times))
 
 
-class ManyMergeableGraph(MergeableGraph):
+class MergeGraph5(MergeGraph):
     n_groups = 5
+
+
+class MergeGraph26(MergeGraph):
+    n_items = 1000
+    n_groups = 26
 

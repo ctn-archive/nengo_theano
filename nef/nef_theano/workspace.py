@@ -8,6 +8,7 @@ from theano.gof.vm import VM_Linker
 from theano.compile import deep_copy_op
 from theano.compile.function_module import infer_reuse_pattern
 from theano.compile.pfunc import rebuild_collect_shared
+from theano.printing import debugprint
 
 
 def optimizer_from_any(specifier):
@@ -350,6 +351,7 @@ IncSubtensor = theano.tensor.IncSubtensor
 Subtensor = theano.tensor.Subtensor
 Reshape = theano.tensor.Reshape
 from theano.tensor.basic import get_scalar_constant_value
+from theano.tensor.basic import NotScalarConstantError
 
 
 class RefactorSubtensors(Optimizer):
@@ -481,10 +483,11 @@ theano.compile.mode.optdb.register('refactor_subtensors',
 
 
 class Match(object):
-    def __init__(self, cls,
+    def __init__(self, name, cls,
             match_fn=None,
             unmatch_fn=None,
             **attrs):
+        self._name = name
         self._cls = cls
         self._attrs = attrs
         self._match_fn = match_fn
@@ -527,6 +530,7 @@ class Match(object):
             else:
                 ok('assigning attrib', varname, opval)
                 assignment[varname] = opval
+        assignment[self._name] = node
         if len(node.inputs) != len(self._inputs):
             raise ValueError('input count')
         for invar, arg in zip(node.inputs, self._inputs):
@@ -564,7 +568,7 @@ class MatchConstant(object):
     def match(self, var, assignment):
         try:
             value = get_scalar_constant_value(var)
-        except TypeError:
+        except NotScalarConstantError:
             return
         if self.val is None:
             # -- any constant value will do
@@ -580,37 +584,78 @@ class MatchConstant(object):
 @register_canonicalize
 @local_optimizer()
 def local_consolidate_incsubtensor(node):
-    template = Match(IncSubtensor, idx_list='i1', set_instead_of_inc='s/i')(
-        Match(IncSubtensor, idx_list='i2', set_instead_of_inc='s/i')(
+    # TODO: check to see if an IncSubtensor among the clients of node would
+    # match, and abort if that's true, so we leave the work to the parent.
+    # It's not clear if we can get away with not running the entire function
+    # fo the parent though... maybe it's better just to write an Optimizer
+    # class that iterates correctly and doesn't do too many replacements?
+    #
+    # -- Empirically, the current local_optimizer seems to be iterating from
+    # outputs to inputs, which is actually the order we want.
+
+    template = Match('is1', IncSubtensor, idx_list='i1', set_instead_of_inc='s/i')(
+        Match('is2', IncSubtensor, idx_list='i2', set_instead_of_inc='s/i')(
             'x',
-            Match(Subtensor, idx_list='i2')('v')),
-        Match(Subtensor, idx_list='i1')('v'))
+            Match('st2', Subtensor, idx_list='i2')('v')),
+        Match('st1', Subtensor, idx_list='i1')('v'))
 
     assignment = template.match(node, {})
-    if assignment:
-        # print assignment
-        i1 = assignment['i1']
-        i2 = assignment['i2']
-        if len(i1) > 1 or len(i2) > 1:
-            raise NotImplementedError('too many idx terms')
-        i1 = i1[0]
-        i2 = i2[0]
-        if isinstance(i1, slice) and isinstance(i2, slice):
-            if not (i1.step in (1, None) or i2.step in (1, None)):
-                return
-            if i2.start < i2.stop == i1.start < i1.stop:
-                i2, i1 = i1, i2
-            if i1.start < i1.stop == i2.start < i2.stop:
-                start = i1.start
-                stop = i2.stop
-                x = assignment['x']
-                v = assignment['v']
-                rval = theano.tensor.inc_subtensor(
-                    x[start:stop],
-                    v[start:stop],
-                    set_instead_of_inc=assignment['s/i']
-                    )
-                return [rval]
+    assignments = []
+    while assignment:
+        assignments.append(assignment)
+        assignment = template.match(assignment['is2'], {})
+
+    if not assignments:
+        return
+
+    #incsubtensors = [a['is1'] for a in assignments] + [assignments[-1]['is2']]
+    if any([len(a['i1']) > 1 for a in assignments]):
+        # NotImplemented
+        return
+    if any([len(a['i2']) > 1 for a in assignments]):
+        # NotImplemented
+        return
+    if any([not isinstance(a['i1'][0], slice) for a in assignments]):
+        # NotImplemented
+        return
+    if any([not isinstance(a['i2'][0], slice) for a in assignments]):
+        # NotImplemented
+        return
+    if any([a['i2'][0].step not in (1, None) for a in assignments]):
+        # NotImplementedError
+        # It should be possible to detect interleaved access patterns that are
+        # guaranteed to provide full coverage (or even just enough coverage to
+        # justify doing a more parallized summation)
+        # e.g. a[::2] += b[::2] and a[1::2] += b[1::2]
+        #      -> (a + b)[::2] and (a + b)[1::2]
+        # Like all applications of this optimization, it is meant to really
+        # pay off in conjunction with local_cut_whole_incsubtensor, which
+        # arises in the graphs formed by SharedStorageWorkspace.
+        return
+
+    def start_stop_node(a):
+        return (a.op.idx_list[0].start, a.op.idx_list[0].stop, a)
+
+    incsubtensors = ([start_stop_node(a['is1']) for a in assignments]
+            + [start_stop_node(assignments[-1]['is2'])])
+    incsubtensors.sort()
+
+    # -- ensure we have a contiguous range
+    if not all(ssn0[1] == ssn1[0]
+            for ssn0, ssn1 in zip(incsubtensors[:-1], incsubtensors[1:])):
+        return
+
+    start = incsubtensors[0][0]
+    stop = incsubtensors[-1][1]
+    x = assignments[-1]['x']
+    v = assignments[-1]['v']
+    set_instead_of_inc = assignments[-1]['s/i']
+    rval = theano.tensor.inc_subtensor(
+        x[start:stop],
+        v[start:stop],
+        set_instead_of_inc=set_instead_of_inc,
+        )
+    return [rval]
 
 
 @register_specialize
@@ -618,7 +663,7 @@ def local_consolidate_incsubtensor(node):
 @local_optimizer()
 def local_cut_whole_incsubtensor(node):
     # TODO: template works only for vectors, because of reshape varargs
-    match_inc_subtensor = Match(IncSubtensor, idx_list='i1', set_instead_of_inc='s/i')
+    match_inc_subtensor = Match('is1', IncSubtensor, idx_list='i1', set_instead_of_inc='s/i')
     template = match_inc_subtensor('x', 'inc_val')
 
     shape_of = node.fgraph.shape_feature.shape_of
@@ -628,11 +673,20 @@ def local_cut_whole_incsubtensor(node):
         # print assignment
         i1 = assignment['i1']
         x = assignment['x']
+        try:
+            x_len = get_scalar_constant_value(shape_of[x][0])
+        except NotScalarConstantError:
+            # can happen before constant-folding?
+            #print "Not a scalar constant??"
+            #debugprint(shape_of[x][0])
+            #print '-- shape of'
+            #debugprint(x)
+            return
         inc_val = assignment['inc_val']
         if (len(i1) == 1
                 and isinstance(i1[0], slice)
                 and i1[0].start == 0
-                and i1[0].stop == get_scalar_constant_value(shape_of[x][0])
+                and i1[0].stop == x_len
                 and i1[0].step in (1, None)):
             if assignment['s/i']:
                 return [assignment['inc_val']]
