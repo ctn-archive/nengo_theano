@@ -84,7 +84,7 @@ class MergeableGraph(unittest.TestCase, StdMixins):
 
     def test_merged(self):
         ws, ws_shrd = self.foo[2:]
-        assert len(ws.vals_memo) == 2
+        assert len(ws.vals_memo) == self.n_groups
         assert len(ws_shrd.vals_memo) == 1
 
     def test_computation_merged(self):
