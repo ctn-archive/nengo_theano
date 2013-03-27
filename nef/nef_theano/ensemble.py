@@ -229,6 +229,8 @@ class Ensemble:
         self.encoders = self.make_encoders(encoders=encoders)
         # combine encoders and gain for simplification
         self.encoders = (self.encoders.T * alpha.T).T
+        self.shared_encoders = theano.shared(self.encoders, 
+            name='ensemble.shared_encoders')
         
         # make default origin
         self.origin = {}
@@ -424,17 +426,12 @@ class Ensemble:
                 # add its values directly to the input current 
                 J += a.new_learn_input
 
-        assert not hasattr(self.encoders, 'type')
         # onlf do this if X is a theano object (i.e. there was decoded_input)
         if hasattr(X, 'type'):
-            # XXX shared_encoders are *NOT* aliased to self.encoders in
-            #     any way
-            shared_encoders = theano.shared(self.encoders.astype(X.dtype))
-            
             # add to input current for each neuron as
             # represented input signal x preferred direction
             #TODO: use TT.batched_dot function here instead?
-            J = [J[i] + TT.dot(shared_encoders[i], X[i].T)
+            J = [J[i] + TT.dot(self.shared_encoders[i], X[i].T)
                  for i in range(self.array_size)]
 
         # if noise has been specified for this neuron,

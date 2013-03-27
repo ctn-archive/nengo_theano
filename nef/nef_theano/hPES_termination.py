@@ -50,7 +50,7 @@ class hPESTermination(LearnedTermination):
 
     def learn(self):
         # get the error as represented by the post neurons
-        encoded_error = np.sum(self.encoders * TT.reshape( self.error_value, 
+        encoded_error = TT.sum(self.encoders * TT.reshape( self.error_value, 
             (self.post.array_size, 1, self.post.dimensions)) , axis=-1)
 
         supervised_rate = self.learning_rate
