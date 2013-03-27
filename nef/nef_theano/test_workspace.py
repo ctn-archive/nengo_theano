@@ -57,29 +57,30 @@ class SwapGraph(unittest.TestCase, StdMixins):
 
 
 class MergeableGraph(unittest.TestCase, StdMixins):
+    n_groups = 2
+    n_items = 2
     def setUp(self):
-
-        x = tensor.vector('x')
-        y = tensor.vector('y')
+        letters = 'xyzabcdefghijklmnopqrstuvw'
+        symbols = [tensor.vector(a) for a in letters[:self.n_groups]]
 
         ws = Workspace()
-        ws[x] = [1, 2]
-        ws[y] = [3, 4]
-        f = ws.compile_update('f', [(x, 2 * x), (y, 2 * y)])
+        for i, s in enumerate(symbols):
+            ws[s] = range(i, i + self.n_items)
+        f = ws.compile_update('f', [(s, 2 * s) for s in symbols])
 
         ws_shrd = SharedStorageWorkspace(ws)
         f_opt = ws_shrd.compiled_updates['f']
-        self.foo = x, y, ws, ws_shrd
+        self.foo = letters, symbols, ws, ws_shrd
 
     def tearDown(self):
-        x, y, ws, ws_shrd = self.foo
+        letters, symbols, ws, ws_shrd = self.foo
 
         for w in (ws, ws_shrd):
-            assert np.allclose([w[x], w[y]],[[1, 2], [3, 4]])
+            for i, s in enumerate(symbols):
+                assert np.allclose(w[s], range(i, i + self.n_items))
             w.run_update('f')
-            assert np.allclose([w[x], w[y]],[[2, 4], [6, 8]])
-            w.run_update('f')
-            assert np.allclose([w[x], w[y]],[[4, 8], [12, 16]])
+            for i, s in enumerate(symbols):
+                assert np.allclose(w[s], 2 * np.arange(i, i + self.n_items))
 
     def test_merged(self):
         ws, ws_shrd = self.foo[2:]
@@ -91,3 +92,8 @@ class MergeableGraph(unittest.TestCase, StdMixins):
         ws_shrd = self.foo[3]
         ws_shrd.optimize('fast_run')
         theano.printing.debugprint(ws_shrd.compiled_updates['f'].ufgraph.fgraph.outputs)
+
+
+class ManyMergeableGraph(MergeableGraph):
+    n_groups = 5
+

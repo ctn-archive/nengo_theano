@@ -86,6 +86,27 @@ class UpdateFGraph(object):
         for feature in theano.compile.function_module.std_fgraph.features:
             fgraph.attach_feature(feature())
 
+        fgraph.attach_feature(theano.tensor.opt.ShapeFeature())
+
+        # -- pre-install the shape information from the Hints created by
+        #    e.g. SharedStorageWorkspace
+        done = {}
+        for node in fgraph.toposort():
+            if is_hint_node(node):
+                if node.inputs[0] in done: continue
+                hints = dict(node.op.hints)
+                if 'shape' in hints:
+                    x = node.inputs[0]
+                    assert x.ndim == len(hints['shape'])
+                    if x in done:
+                        assert done[x] == hints['shape']
+                    else:
+                        var_shape = tuple(
+                            map(theano.tensor.as_tensor_variable,
+                                hints['shape']))
+                        fgraph.shape_feature.shape_of[node.inputs[0]] = var_shape
+                        done[x] = hints['shape']
+
         self.updated_vars = updated_vars
         self.all_inputs = all_inputs
         self.outputs = outputs
@@ -197,6 +218,8 @@ class Workspace(object):
             cu_opt = CompiledUpdate(cu.ufgraph, self.vals_memo)
             self.compiled_updates[key] = cu_opt
 
+from theano.sandbox.linalg.ops import Hint
+from theano.sandbox.linalg.ops import is_hint_node
 
 class SharedStorageWorkspace(Workspace):
     def __init__(self, ws):
@@ -258,9 +281,9 @@ class SharedStorageWorkspace(Workspace):
             if dst in self.views_memo:
                 var, offset, n_elems = self.views_memo[dst]
                 # -- build the shape into the graph
-                shp = self.vals_memo[var][0].shape
-                print 'shp', shp
-                upvar = noview_updated_vars.get(var, var.reshape(shp))
+                #shp = self.vals_memo[var][0].shape
+                # print 'shp', shp
+                upvar = noview_updated_vars.get(var, var)
                 upvar = theano.tensor.set_subtensor(
                         upvar[offset: offset + n_elems],
                         out)
@@ -274,7 +297,8 @@ class SharedStorageWorkspace(Workspace):
         for var in self.views_memo:
             svar, offset, n_elems = self.views_memo[var]
             shp = self.vals_memo[svar][0].shape
-            givens.append((var, svar.reshape(shp)[offset: offset + n_elems]))
+            svar = Hint(shape=shp)(svar)
+            givens.append((var, svar[offset: offset + n_elems]))
 
         ufgraph = UpdateFGraph(noview_updated_vars.items(), givens=givens)
         cu = CompiledUpdate(ufgraph, self.vals_memo)
@@ -323,11 +347,8 @@ from theano.tensor.blas import Optimizer
 IncSubtensor = theano.tensor.IncSubtensor
 Subtensor = theano.tensor.Subtensor
 Reshape = theano.tensor.Reshape
-from theano.tensor.basic import get_constant_value
-try:
-    get_constant_value = theano.tensor.basic.get_constant_value
-except:
-    print dir(theano.tensor.basic)
+from theano.tensor.basic import get_scalar_constant_value
+
 
 class RefactorSubtensors(Optimizer):
     """
@@ -353,7 +374,7 @@ class RefactorSubtensors(Optimizer):
         time_toposort = 0
 
         did_something = True
-        print '-- START -- '
+        #print '-- START -- '
 
         Subtensor = theano.tensor.Subtensor
 
@@ -364,7 +385,7 @@ class RefactorSubtensors(Optimizer):
         while did_something:
             did_something = False
             nb_iter += 1
-            print 'NEW LOOP'
+            #print 'NEW LOOP'
 
             subtensors = [n for n in fgraph.toposort()
                     if isinstance(n.op, Subtensor)]
@@ -404,7 +425,7 @@ class RefactorSubtensors(Optimizer):
                         # TODO: consider merging *some* of the subtensor clients
                         if all(r0[1] == r1[0]
                                 for r0, r1 in zip(ranges[:-1], ranges[1:])):
-                            print 'potentially merge', x, ranges
+                            #print 'potentially merge', x, ranges
                             replacements = []
                             to_go = set()
                             # -- check for common operations on these slices.
@@ -432,19 +453,20 @@ class RefactorSubtensors(Optimizer):
                                         replacements.append((client_apply.outputs[0], new_out))
                                         assert client_apply.outputs[0] not in to_go
                                         to_go.add(client_apply.outputs[0])
-                            print 'Replacements', replacements
+                            #print 'Replacements', replacements
                             fgraph.replace_all_validate(replacements,
                                 reason='RefactorSubtensors')
                             nb_replacement += len(replacements)
                             did_something = True
                         else:
-                            print 'clients did not match up'
+                            #print 'clients did not match up'
+                            pass
                     else:
                         # -- TODO: match up other kinds of indexing
                         continue
 
-        theano.printing.debugprint(fgraph.outputs)
-        print '-- DONE -- '
+        #theano.printing.debugprint(fgraph.outputs)
+        #print '-- DONE -- '
         return (self, nb_iter, nb_replacement, nb_replacement_didn_t_remove,
                 nb_inconsistency_make, nb_inconsistency_replace,
                 time_canonicalize, time_factor_can,
@@ -454,6 +476,7 @@ class RefactorSubtensors(Optimizer):
 theano.compile.mode.optdb.register('refactor_subtensors',
         RefactorSubtensors(),
         0, 'fast_compile', 'fast_run')
+
 
 class Match(object):
     def __init__(self, cls,
@@ -530,6 +553,7 @@ class Match(object):
                 raise NotImplementedError(arg)
         return assignment
 
+
 class MatchConstant(object):
     def __init__(self, name, val=None):
         self.name = name
@@ -537,7 +561,7 @@ class MatchConstant(object):
 
     def match(self, var, assignment):
         try:
-            value = get_constant_value(var)
+            value = get_scalar_constant_value(var)
         except TypeError:
             return
         if self.val is None:
@@ -550,6 +574,7 @@ class MatchConstant(object):
                 return
         return assignment
 
+
 @register_canonicalize
 @local_optimizer()
 def local_consolidate_incsubtensor(node):
@@ -561,7 +586,7 @@ def local_consolidate_incsubtensor(node):
 
     assignment = template.match(node, {})
     if assignment:
-        print assignment
+        # print assignment
         i1 = assignment['i1']
         i2 = assignment['i2']
         if len(i1) > 1 or len(i2) > 1:
@@ -591,47 +616,24 @@ def local_consolidate_incsubtensor(node):
 @local_optimizer()
 def local_cut_whole_incsubtensor(node):
     # TODO: template works only for vectors, because of reshape varargs
-    template = Match(IncSubtensor, idx_list='i1', set_instead_of_inc='s/i')(
-        Match(Reshape)('x', MatchConstant('x_len')),
-        'inc_val')
+    match_inc_subtensor = Match(IncSubtensor, idx_list='i1', set_instead_of_inc='s/i')
+    template = match_inc_subtensor('x', 'inc_val')
 
-    # TODO: use ShapeFeature
+    shape_of = node.fgraph.shape_feature.shape_of
 
     assignment = template.match(node, {})
     if assignment:
         # print assignment
-        x_len = assignment['x_len']
         i1 = assignment['i1']
+        x = assignment['x']
+        inc_val = assignment['inc_val']
         if (len(i1) == 1
                 and isinstance(i1[0], slice)
                 and i1[0].start == 0
-                and i1[0].stop == x_len
+                and i1[0].stop == get_scalar_constant_value(shape_of[x][0])
                 and i1[0].step in (1, None)):
             if assignment['s/i']:
                 return [assignment['inc_val']]
             else:
-                return [assignment['inc_val'] + x.reshape(x_len)]
-
-#@register_specialize
-#@register_canonicalize
-@local_optimizer()
-def local_cut_whole_subtensor(node):
-    # TODO: template works only for vectors, because of reshape varargs
-    template = Match(Subtensor, idx_list='i1')(
-        Match(Reshape)('x', MatchConstant('x_len')))
-
-    # TODO: use ShapeFeature
-
-    assignment = template.match(node, {})
-    if assignment:
-        print assignment
-        x_len = assignment['x_len']
-        i1 = assignment['i1']
-        if (len(i1) == 1
-                and isinstance(i1[0], slice)
-                and i1[0].start == 0
-                and i1[0].stop == x_len
-                and i1[0].step in (1, None)):
-            return node.inputs[0]
-
+                return [assignment['inc_val'] + x]
 
