@@ -128,8 +128,11 @@ class MergeGraph(unittest.TestCase, StdMixins):
 class MergeGraph5(MergeGraph):
     n_groups = 5
 
-
-class MergeGraph26(MergeGraph):
-    n_items = 1000
+class MergeGraph26_50(MergeGraph):
     n_groups = 26
+    n_items = 50
+
+class MergeGraph26_1000(MergeGraph):
+    n_groups = 26
+    n_items = 1000
 
