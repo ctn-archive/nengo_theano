@@ -6,6 +6,7 @@ import numpy as np
 import theano
 from theano.gof.vm import VM_Linker
 from theano.compile import deep_copy_op
+from theano.compile.function_module import infer_reuse_pattern
 from theano.compile.pfunc import rebuild_collect_shared
 
 
@@ -120,8 +121,9 @@ class CompiledUpdate(object):
 
         # -- create a VM to run the updates
         #    XXX CVM is necessary here until LoopGC implements updates
-        linker = VM_Linker(use_cloop=True, **VM_Linker_kwargs)
-        linker.accept(ufgraph.fgraph, no_recycling=[])
+        linker = VM_Linker(use_cloop=False, allow_gc=False, **VM_Linker_kwargs)
+        no_recycling = infer_reuse_pattern(ufgraph.fgraph, ufgraph.fgraph.outputs)
+        linker.accept(ufgraph.fgraph, no_recycling=no_recycling)
         linker.accept_var_updates(dict(zip(
             ufgraph.cloned_dests,
             ufgraph.cloned_outputs)))

@@ -6,7 +6,7 @@ from workspace import Workspace, SharedStorageWorkspace
 
 class StdMixins(object):
     def test_scaffolding(self):
-        pass
+        theano.printing.debugprint(self.foo[2].compiled_updates['f'].ufgraph.fgraph.outputs)
 
     def test_optimize(self):
         ws = self.foo[2]
@@ -49,6 +49,10 @@ class SwapGraph(unittest.TestCase, StdMixins):
 
     def tearDown(self):
         x, y, ws = self.foo
+        assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]]), (ws[x], ws[y])
+        ws.run_update('f')
+        assert np.allclose([ws[x], ws[y]],[[3, 4], [1, 2]]), (ws[x], ws[y])
+        ws.run_update('f')
         assert np.allclose([ws[x], ws[y]],[[1, 2], [3, 4]]), (ws[x], ws[y])
         ws.run_update('f')
         assert np.allclose([ws[x], ws[y]],[[3, 4], [1, 2]]), (ws[x], ws[y])
