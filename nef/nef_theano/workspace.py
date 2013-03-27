@@ -257,9 +257,12 @@ class SharedStorageWorkspace(Workspace):
         for dst, out in updated_vars:
             if dst in self.views_memo:
                 var, offset, n_elems = self.views_memo[dst]
+                # -- build the shape into the graph
+                shp = self.vals_memo[var][0].shape
+                print 'shp', shp
+                upvar = noview_updated_vars.get(var, var.reshape(shp))
                 upvar = theano.tensor.set_subtensor(
-                        noview_updated_vars.get(var, var)[
-                            offset: offset + n_elems],
+                        upvar[offset: offset + n_elems],
                         out)
                 noview_updated_vars[var] = upvar
             else:
@@ -270,7 +273,8 @@ class SharedStorageWorkspace(Workspace):
         givens = []
         for var in self.views_memo:
             svar, offset, n_elems = self.views_memo[var]
-            givens.append((var, svar[offset: offset + n_elems]))
+            shp = self.vals_memo[svar][0].shape
+            givens.append((var, svar.reshape(shp)[offset: offset + n_elems]))
 
         ufgraph = UpdateFGraph(noview_updated_vars.items(), givens=givens)
         cu = CompiledUpdate(ufgraph, self.vals_memo)
@@ -312,7 +316,18 @@ def function(inputs, outputs, ws_cls=Workspace):
 
 
 from theano.tensor.opt import register_canonicalize
+from theano.tensor.opt import register_specialize
+from theano.tensor.blas import local_optimizer
 from theano.tensor.blas import Optimizer
+
+IncSubtensor = theano.tensor.IncSubtensor
+Subtensor = theano.tensor.Subtensor
+Reshape = theano.tensor.Reshape
+from theano.tensor.basic import get_constant_value
+try:
+    get_constant_value = theano.tensor.basic.get_constant_value
+except:
+    print dir(theano.tensor.basic)
 
 class RefactorSubtensors(Optimizer):
     """
@@ -341,6 +356,10 @@ class RefactorSubtensors(Optimizer):
         print '-- START -- '
 
         Subtensor = theano.tensor.Subtensor
+
+        # XXX: make sure we don't replace all elemwise(subtensor) with
+        # subtensor(elemwise) because most of the time that would be a bad
+        # idea!
 
         while did_something:
             did_something = False
@@ -431,7 +450,188 @@ class RefactorSubtensors(Optimizer):
                 time_canonicalize, time_factor_can,
                 time_factor_list, time_toposort)
 
+
 theano.compile.mode.optdb.register('refactor_subtensors',
         RefactorSubtensors(),
         0, 'fast_compile', 'fast_run')
+
+class Match(object):
+    def __init__(self, cls,
+            match_fn=None,
+            unmatch_fn=None,
+            **attrs):
+        self._cls = cls
+        self._attrs = attrs
+        self._match_fn = match_fn
+        self._unmatch_fn = unmatch_fn
+
+    def __call__(self, *inputs):
+        if hasattr(self, '_inputs'):
+            raise TypeError('wrong usage, call Match once')
+        self._inputs = inputs
+        return self
+
+    def match(self, node, assignment):
+        def ok(*args):
+            #print 'OK ' + ' '.join([str(a) for a in args])
+            pass
+        def fail(*args):
+            #print '-- ' + ' '.join([str(a) for a in args])
+            pass
+
+        if node is None:
+            fail('not matching null node')
+            return
+        if isinstance(node.op, self._cls):
+            ok('matched class', node.op, self._cls)
+        else:
+            fail('not matching wrong class', node.op, self._cls)
+            return
+        for attr, varname in self._attrs.items():
+            opval = getattr(node.op, attr)
+            if varname in assignment:
+                if assignment[varname] == opval:
+                    ok('matched attrib', varname, opval)
+                elif (isinstance(opval, (list, tuple)) and
+                    isinstance(assignment[varname], (list, tuple))
+                    and tuple(opval) == tuple(assignment[varname])):
+                    ok('matched attrib', varname, opval)
+                else:
+                    fail('not matching attribute', varname, opval)
+                    return
+            else:
+                ok('assigning attrib', varname, opval)
+                assignment[varname] = opval
+        if len(node.inputs) != len(self._inputs):
+            raise ValueError('input count')
+        for invar, arg in zip(node.inputs, self._inputs):
+            if isinstance(arg, Match):
+                assignment = arg.match(invar.owner, assignment)
+                if not assignment:
+                    return
+            elif isinstance(arg, MatchConstant):
+                assignment = arg.match(invar, assignment)
+                if assignment:
+                    ok('matched constant', arg, invar)
+                else:
+                    fail('failed to match constant', arg, invar)
+                    return
+            elif isinstance(arg, basestring):
+                if arg in assignment:
+                    if assignment[arg] == invar:
+                        ok('matched free var', arg, invar)
+                    else:
+                        fail('wrong free var', arg, invar)
+                        return
+                else:
+                    ok('assigning free var', arg, invar)
+                    assignment[arg] = invar
+            else:
+                raise NotImplementedError(arg)
+        return assignment
+
+class MatchConstant(object):
+    def __init__(self, name, val=None):
+        self.name = name
+        self.val = val
+
+    def match(self, var, assignment):
+        try:
+            value = get_constant_value(var)
+        except TypeError:
+            return
+        if self.val is None:
+            # -- any constant value will do
+            assignment[self.name] = value
+        else:
+            if self.val == value:
+                assignment[self.name] = value
+            else:
+                return
+        return assignment
+
+@register_canonicalize
+@local_optimizer()
+def local_consolidate_incsubtensor(node):
+    template = Match(IncSubtensor, idx_list='i1', set_instead_of_inc='s/i')(
+        Match(IncSubtensor, idx_list='i2', set_instead_of_inc='s/i')(
+            'x',
+            Match(Subtensor, idx_list='i2')('v')),
+        Match(Subtensor, idx_list='i1')('v'))
+
+    assignment = template.match(node, {})
+    if assignment:
+        print assignment
+        i1 = assignment['i1']
+        i2 = assignment['i2']
+        if len(i1) > 1 or len(i2) > 1:
+            raise NotImplementedError('too many idx terms')
+        i1 = i1[0]
+        i2 = i2[0]
+        if isinstance(i1, slice) and isinstance(i2, slice):
+            if not (i1.step in (1, None) or i2.step in (1, None)):
+                return
+            if i2.start < i2.stop == i1.start < i1.stop:
+                i2, i1 = i1, i2
+            if i1.start < i1.stop == i2.start < i2.stop:
+                start = i1.start
+                stop = i2.stop
+                x = assignment['x']
+                v = assignment['v']
+                rval = theano.tensor.inc_subtensor(
+                    x[start:stop],
+                    v[start:stop],
+                    set_instead_of_inc=assignment['s/i']
+                    )
+                return [rval]
+
+
+@register_specialize
+@register_canonicalize
+@local_optimizer()
+def local_cut_whole_incsubtensor(node):
+    # TODO: template works only for vectors, because of reshape varargs
+    template = Match(IncSubtensor, idx_list='i1', set_instead_of_inc='s/i')(
+        Match(Reshape)('x', MatchConstant('x_len')),
+        'inc_val')
+
+    # TODO: use ShapeFeature
+
+    assignment = template.match(node, {})
+    if assignment:
+        # print assignment
+        x_len = assignment['x_len']
+        i1 = assignment['i1']
+        if (len(i1) == 1
+                and isinstance(i1[0], slice)
+                and i1[0].start == 0
+                and i1[0].stop == x_len
+                and i1[0].step in (1, None)):
+            if assignment['s/i']:
+                return [assignment['inc_val']]
+            else:
+                return [assignment['inc_val'] + x.reshape(x_len)]
+
+#@register_specialize
+#@register_canonicalize
+@local_optimizer()
+def local_cut_whole_subtensor(node):
+    # TODO: template works only for vectors, because of reshape varargs
+    template = Match(Subtensor, idx_list='i1')(
+        Match(Reshape)('x', MatchConstant('x_len')))
+
+    # TODO: use ShapeFeature
+
+    assignment = template.match(node, {})
+    if assignment:
+        print assignment
+        x_len = assignment['x_len']
+        i1 = assignment['i1']
+        if (len(i1) == 1
+                and isinstance(i1[0], slice)
+                and i1[0].start == 0
+                and i1[0].stop == x_len
+                and i1[0].step in (1, None)):
+            return node.inputs[0]
+
 
