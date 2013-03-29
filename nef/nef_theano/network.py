@@ -204,7 +204,7 @@ class Network(object):
         post = self.get_object(post)
 
         # get the origin from the pre Node
-        pre_origin = self.get_origin(pre)
+        pre_origin = self.get_origin(pre, func)
         # get pre Node object from node dictionary
         pre = self.get_object(pre)
 
