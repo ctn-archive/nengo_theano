@@ -25,18 +25,14 @@ net.connect('in', 'A')
 net.connect('A', 'error1')
 net.connect('B', 'error1', weight=-1)
 
-t_final = 5
+t_final = 10
 dt_step = 0.01
 pstc = 0.03
 
-Ip = net.make_probe(
-    net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Ap = net.make_probe(
-    net.nodes['A'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-Bp = net.make_probe(
-    net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-E1p = net.make_probe(net.nodes['error1'].origin['X'].decoded_output,
-                     dt_sample=dt_step, pstc=pstc)
+Ip = net.make_probe('in', dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe('A', dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe('B', dt_sample=dt_step, pstc=pstc)
+E1p = net.make_probe('error1', dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
 net.run(t_final)

@@ -46,6 +46,7 @@ class EnsembleOrigin(Origin):
         :param list eval_points:
             specific set of points to optimize decoders over 
         """
+        key = self.ensemble.cache_key
         if eval_points == None:  
             # generate sample points from state space randomly
             # to minimize decoder error over in decoder calculation
@@ -62,6 +63,10 @@ class EnsembleOrigin(Origin):
             if len(eval_points.shape) == 1:
                 eval_points.shape = [1, eval_points.shape[0]]
             self.num_samples = eval_points.shape[1]
+
+            if eval_points is not self.ensemble.eval_points:
+                key += '_eval%08x' % hash(tuple([tuple(x) for x in eval_points]))
+
 
         # compute the target_values at the sampled points 
         if func is None:
@@ -92,8 +97,8 @@ class EnsembleOrigin(Origin):
                              target_values.shape[0]))
 
         for index in range(self.ensemble.array_size): 
-            key=self.ensemble.cache_key+'_%d'%index
-            data = cache.get_gamma_inv(key)
+            index_key = key + '_%d'%index
+            data = cache.get_gamma_inv(index_key)
             if data is not None:
                 Ginv, A = data
             else:
@@ -145,8 +150,7 @@ class EnsembleOrigin(Origin):
                 Ginv = np.dot(v, np.multiply(w[:, np.newaxis], v.T)) 
                 
                 #Ginv=np.linalg.pinv(G, rcond=.01)  
-                cache.set_gamma_inv(key, (Ginv, A))
-
+                cache.set_gamma_inv(index_key, (Ginv, A))
 
             U = np.dot(A, target_values.T)
             
