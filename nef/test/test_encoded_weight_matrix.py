@@ -45,18 +45,12 @@ dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01
 
-Ip = net.make_probe(net.nodes['in1'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
-Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
-Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
-B2p = net.make_probe(net.nodes['B2'].origin['X'].decoded_output,
-                     dt_sample=dt_step, pstc=pstc)
-B3p = net.make_probe(net.nodes['B3'].origin['X'].decoded_output,
-                     dt_sample=dt_step, pstc=pstc)
-B4p = net.make_probe(net.nodes['B4'].origin['X'].decoded_output,
-                     dt_sample=dt_step, pstc=pstc)
+Ip = net.make_probe('in1', dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe('A', dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe('B', dt_sample=dt_step, pstc=pstc)
+B2p = net.make_probe('B2', dt_sample=dt_step, pstc=pstc)
+B3p = net.make_probe('B3', dt_sample=dt_step, pstc=pstc)
+B4p = net.make_probe('B4', dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
 net.run(timesteps*dt_step)
@@ -64,15 +58,15 @@ net.run(timesteps*dt_step)
 plt.ioff(); plt.close(); 
 plt.subplot(611); plt.title('Input1')
 plt.plot(Ip.get_data()); 
-plt.subplot(612); plt.title('A = In1')
+plt.subplot(612); plt.title('A')
 plt.plot(Ap.get_data())
-plt.subplot(613); plt.title('B = In2(0) inhib by A')
+plt.subplot(613); plt.title('B')
 plt.plot(Bp.get_data())
-plt.subplot(614); plt.title('B2 = In2, network array inhib by A')
+plt.subplot(614); plt.title('B2')
 plt.plot(B2p.get_data())
-plt.subplot(615); plt.title('B3 = In2(0), inhib by scalar from A')
+plt.subplot(615); plt.title('B3')
 plt.plot(B3p.get_data())
-plt.subplot(616); plt.title('B4 = In2(0), inhib by scalar from A')
+plt.subplot(616); plt.title('B4')
 plt.plot(B4p.get_data())
 plt.tight_layout()
 plt.show()

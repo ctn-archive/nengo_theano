@@ -29,8 +29,10 @@ net.make_input('in', value=math.sin)
 # for test 1
 net.make('A1', neurons=300, dimensions=1)
 # for test 2
+print 'here'
 net.make('A2', neurons=300, dimensions=1, eval_points=eval_points)
 # for test 3
+print 'here2'
 net.make('A3', neurons=300, dimensions=1, eval_points=eval_points)
 
 net.make('B', neurons=100, dimensions=1)
@@ -43,8 +45,10 @@ def pow(x):
 
 # create origins with eval_points
 # for test 1
+print 'here3'
 net.nodes['A1'].add_origin('pow', func=pow, eval_points=eval_points)
 # for test 3
+print 'here 4'
 net.nodes['A3'].add_origin('pow', func=pow, eval_points=eval_points)
 
 net.connect('in', 'A1')
@@ -59,14 +63,10 @@ dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01
 
-Ip = net.make_probe(
-    net.nodes['in'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-A1p = net.make_probe(
-    net.nodes['B'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-A2p = net.make_probe(
-    net.nodes['C'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
-A3p = net.make_probe(
-    net.nodes['D'].origin['X'].decoded_output, dt_sample=dt_step, pstc=pstc)
+Ip = net.make_probe('in', dt_sample=dt_step, pstc=pstc)
+A1p = net.make_probe('B', dt_sample=dt_step, pstc=pstc)
+A2p = net.make_probe('C', dt_sample=dt_step, pstc=pstc)
+A3p = net.make_probe('D', dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
 net.run(timesteps*dt_step)

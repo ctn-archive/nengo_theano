@@ -54,18 +54,12 @@ timesteps = 500
 dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01
-I1p = net.make_probe(net.nodes['SNinput'].origin['test1'].decoded_output,
-                     dt_sample=dt_step, pstc=pstc)
-I2p = net.make_probe(net.nodes['SNinput'].origin['test2'].decoded_output,
-                     dt_sample=dt_step, pstc=pstc)
-I3p = net.make_probe(net.nodes['SNinput'].origin['test3'].decoded_output,
-                     dt_sample=dt_step, pstc=pstc)
-Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
-Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
-Cp = net.make_probe(net.nodes['C'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
+I1p = net.make_probe('SNinput:test1', dt_sample=dt_step, pstc=pstc)
+I2p = net.make_probe('SNinput:test2', dt_sample=dt_step, pstc=pstc)
+I3p = net.make_probe('SNinput:test3', dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe('A', dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe('B', dt_sample=dt_step, pstc=pstc)
+Cp = net.make_probe('C', dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
 net.run(timesteps * dt_step)

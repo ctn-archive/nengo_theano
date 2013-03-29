@@ -25,12 +25,9 @@ timesteps = 500
 dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01
-Ip = net.make_probe(net.nodes['in'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
-Ap = net.make_probe(net.nodes['A'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
-Bp = net.make_probe(net.nodes['B'].origin['X'].decoded_output,
-                    dt_sample=dt_step, pstc=pstc)
+Ip = net.make_probe('in', dt_sample=dt_step, pstc=pstc)
+Ap = net.make_probe('A', dt_sample=dt_step, pstc=pstc)
+Bp = net.make_probe('B', dt_sample=dt_step, pstc=pstc)
 
 print "starting simulation"
 net.run(timesteps * dt_step)

@@ -195,11 +195,18 @@ class Ensemble:
         self.dimensions = dimensions
         self.array_size = array_size
         self.radius = radius
-        self.eval_points = eval_points
         self.noise = noise
         self.decoder_noise=decoder_noise
         self.dt = dt
         self.noise_type = noise_type
+
+        # make sure that eval_points is the right shape
+        if eval_points is not None:
+            eval_points = np.array(eval_points)
+            if len(eval_points.shape) == 1:
+                eval_points.shape = [1, eval_points.shape[0]]
+        self.eval_points = eval_points
+
         self.cache_key = cache.generate_ensemble_key(neurons, dimensions, 
                      tau_rc, tau_ref, max_rate, intercept, radius, encoders, 
                      decoder_noise, eval_points, noise, seed)

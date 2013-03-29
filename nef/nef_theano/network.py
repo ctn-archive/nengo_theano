@@ -451,7 +451,7 @@ class Network(object):
         return subnetwork.SubNetwork(name, self)
             
 
-    def make_probe(self, target, name=None, dt_sample=0.01, **kwargs):
+    def make_probe(self, target, name=None, dt_sample=0.01, data_type='decoded', **kwargs):
         """Add a probe to measure the given target.
         
         :param target: a Theano shared variable to record
@@ -464,6 +464,10 @@ class Network(object):
         while name is None or self.nodes.has_key(name):
             i += 1
             name = ("Probe%d" % i)
+
+        # get the signal to record
+        if data_type == 'decoded':
+            target = self.get_origin(target).decoded_output
 
         p = probe.Probe(name, self, target, dt_sample, **kwargs)
         self.add(p)
