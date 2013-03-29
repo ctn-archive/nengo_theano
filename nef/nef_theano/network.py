@@ -469,6 +469,14 @@ class Network(object):
         if data_type == 'decoded':
             target = self.get_origin(target).decoded_output
 
+        elif data_type == 'spikes':
+            target = self.get_object(target)
+            # check to make sure target is an ensemble
+            assert isinstance(target, ensemble.Ensemble)
+            target = target.neurons.output
+            # set the filter to zero
+            kwargs['pstc'] = 0
+
         p = probe.Probe(name, self, target, dt_sample, **kwargs)
         self.add(p)
         return p

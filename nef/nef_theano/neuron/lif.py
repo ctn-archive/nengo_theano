@@ -19,8 +19,8 @@ class LIFNeuron(Neuron):
         Neuron.__init__(self, size, dt)
         self.tau_rc = tau_rc
         self.tau_ref  = tau_ref
-        self.voltage = theano.shared(np.zeros(size).astype('float32'),
-                                     name='lif.voltage')
+        self.voltage = theano.shared(
+            np.zeros(size).astype('float32'), name='lif.voltage')
         self.refractory_time = theano.shared(
             np.zeros(size).astype('float32'), name='lif.refractory_time')
         
