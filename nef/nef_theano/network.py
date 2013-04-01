@@ -1,8 +1,6 @@
 import random
 import collections
 import quantities
-import neo
-from neo import hdf5io
 
 import theano
 from theano import tensor as TT
@@ -508,34 +506,6 @@ class Network(object):
         # create graph and return optimized update function
         return theano.function([], [], updates=updates)
 
-    def read_data(self, filename='data'):
-        """Read data into Neo structures from an HDF5 file.
-        
-        :param string filename: the name of the file to read from
-        """
-        # open up hdf5 file 
-        if not filename.endswith('.hd5'): filename += '.hd5'
-        iom = hdf5io.NeoHdf5IO(filename=filename)
-        
-        print iom.get_info()
-        # wtf i know right?
-        block_as = iom.read_analogsignal()
-        segment_as = block_as.segments[0]
-        block_st = iom.read_spiketrain()
-        segment_st = block_st.segments[0]
-
-        import matplotlib.pyplot as plt
-        plt.clf();
-        plt.subplot(211); plt.title('analog signal')
-        plt.plot(segment_as.analogsignals[0])
-        plt.subplot(212); plt.title('spike train')
-        plt.plot(segment_st.spiketrains[0])
-        plt.tight_layout()
-        plt.show()
-
-        # close up hdf5 file
-        iom.close()
-
     def run(self, time):
         """Run the simulation.
 
@@ -565,12 +535,15 @@ class Network(object):
         # update run_time variable
         self.run_time += time
 
-    def write_data(self, filename='data'):
+    def write_data_to_hd5(self, filename='data'):
         """This is a function to call after simulation that writes the 
         data of all probes to filename using the Neo HDF5 IO module.
     
         :param string filename: the name of the file to write out to
         """
+        import neo
+        from neo import hdf5io
+
         # get list of probes 
         probe_list = [self.nodes[node] for node in self.nodes 
                       if node[:5] == 'Probe']

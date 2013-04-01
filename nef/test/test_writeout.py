@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import time
+from neo import hdf5io
 
 from .. import nef_theano as nef
 
@@ -38,18 +39,35 @@ print "\nBuild time: %0.10fs" % (build_time_end - build_time_start)
 print "Sim time: %0.10fs" % (sim_time_end - build_time_end)
 
 net.write_data()
-net.read_data()
 
-# plot the results
-'''
-plt.ioff(); plt.close(); 
-plt.subplot(3,1,1)
-plt.plot(t, Ip.get_data(), 'x'); plt.title('Input')
-plt.subplot(3,1,2)
-plt.plot(Ap.get_data()); plt.title('A')
-plt.subplot(3,1,3); plt.hold(1)
-plt.plot(Bp.get_data())
-for row in BpSpikes.get_data().T: 
-    plt.plot(row[0]); 
-plt.title('B')
-plt.show()'''
+# open up hdf5 file 
+iom = hdf5io.NeoHdf5IO(filename='data.hd5')
+
+print iom.get_info()
+# wtf i know right?
+block_as = iom.read_analogsignal()
+segment_as = block_as.segments[0]
+block_st = iom.read_spiketrain()
+segment_st = block_st.segments[0]
+
+import matplotlib.pyplot as plt
+plt.clf();
+plt.subplot(211); plt.title('analog signal'); plt.hold(1)
+legend = []
+for asig in segment_as.analogsignals:
+    plt.plot(asig)
+    legend.append(asig.annotations['target_name'])
+plt.legend(legend)
+plt.subplot(212); plt.title('spike train')
+legend = []
+for i, ssig in enumerate(segment_st.spiketrains):
+    if len(ssig) == 0: continue
+    plt.vlines(ssig, 1, 0)
+    legend.append('neuron %d'%i)
+plt.legend(legend)
+plt.tight_layout()
+plt.show()
+
+# close up hdf5 file
+iom.close()
+
