@@ -1,5 +1,4 @@
 import collections
-import neo
 
 import numpy as np
 import theano
