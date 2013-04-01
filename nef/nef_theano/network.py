@@ -1,5 +1,8 @@
 import random
 import collections
+import quantities
+import neo
+from neo import hdf5io
 
 import theano
 from theano import tensor as TT
@@ -451,7 +454,8 @@ class Network(object):
         return subnetwork.SubNetwork(name, self)
             
 
-    def make_probe(self, target, name=None, dt_sample=0.01, data_type='decoded', **kwargs):
+    def make_probe(self, target, name=None, dt_sample=0.01, 
+                   data_type='decoded', **kwargs):
         """Add a probe to measure the given target.
         
         :param target: a Theano shared variable to record
@@ -461,6 +465,7 @@ class Network(object):
         
         """
         i = 0
+        target_name = target + '-' + data_type
         while name is None or self.nodes.has_key(name):
             i += 1
             name = ("Probe%d" % i)
@@ -477,7 +482,8 @@ class Network(object):
             # set the filter to zero
             kwargs['pstc'] = 0
 
-        p = probe.Probe(name, self, target, dt_sample, **kwargs)
+        p = probe.Probe(name=name, network=self, target=target, 
+                        target_name=target_name, dt_sample=dt_sample, **kwargs)
         self.add(p)
         return p
             
@@ -501,6 +507,34 @@ class Network(object):
 
         # create graph and return optimized update function
         return theano.function([], [], updates=updates)
+
+    def read_data(self, filename='data'):
+        """Read data into Neo structures from an HDF5 file.
+        
+        :param string filename: the name of the file to read from
+        """
+        # open up hdf5 file 
+        if not filename.endswith('.hd5'): filename += '.hd5'
+        iom = hdf5io.NeoHdf5IO(filename=filename)
+        
+        print iom.get_info()
+        # wtf i know right?
+        block_as = iom.read_analogsignal()
+        segment_as = block_as.segments[0]
+        block_st = iom.read_spiketrain()
+        segment_st = block_st.segments[0]
+
+        import matplotlib.pyplot as plt
+        plt.clf();
+        plt.subplot(211); plt.title('analog signal')
+        plt.plot(segment_as.analogsignals[0])
+        plt.subplot(212); plt.title('spike train')
+        plt.plot(segment_st.spiketrains[0])
+        plt.tight_layout()
+        plt.show()
+
+        # close up hdf5 file
+        iom.close()
 
     def run(self, time):
         """Run the simulation.
@@ -530,3 +564,63 @@ class Network(object):
 
         # update run_time variable
         self.run_time += time
+
+    def write_data(self, filename='data'):
+        """This is a function to call after simulation that writes the 
+        data of all probes to filename using the Neo HDF5 IO module.
+    
+        :param string filename: the name of the file to write out to
+        """
+        # get list of probes 
+        probe_list = [self.nodes[node] for node in self.nodes 
+                      if node[:5] == 'Probe']
+
+        # if no probes then just return
+        if len(probe_list) == 0: return
+
+        # open up hdf5 file
+        if not filename.endswith('.hd5'): filename += '.hd5'
+        iom = hdf5io.NeoHdf5IO(filename=filename)
+
+        #TODO: set up to write multiple trials/segments to same block 
+        #      for trials run at different points
+        # create the all encompassing block structure
+        block = neo.Block()
+        # create the segment, representing a trial
+        segment = neo.Segment()
+        # put the segment in the block
+        block.segments.append(segment)
+
+        # create the appropriate Neo structures from the Probes data
+        #TODO: pair any analog signals and spike trains from the same
+        #      population together into a RecordingChannel
+        for probe in probe_list:
+            # decoded signals become AnalogSignals
+            if probe.target_name.endswith('decoded'):
+                segment.analogsignals.append(
+                    neo.AnalogSignal(
+                        probe.get_data() * quantities.dimensionless, 
+                        sampling_period=probe.dt_sample * quantities.s,
+                        target_name=probe.target_name) )
+            # spikes become spike trains
+            elif probe.target_name.endswith('spikes'):
+                # have to change spike train of 0s and 1s to list of times
+                print 'here'
+                for neuron in probe.get_data().T:
+                    segment.spiketrains.append(
+                        neo.SpikeTrain(
+                            [
+                                t * probe.dt_sample 
+                                for t, val in enumerate(neuron[0]) 
+                                if val > 0
+                            ] * quantities.s,
+                            t_stop=len(probe.data),
+                            target_name=probe.target_name) )
+            else: 
+                print 'Do not know how to write %s to file'%probe.target_name
+                assert False
+
+        # write block to file
+        iom.save(block)
+        # close up hdf5 file
+        iom.close()
