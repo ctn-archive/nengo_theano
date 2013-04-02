@@ -1,5 +1,5 @@
 from __future__ import generators
-import nef
+import nef.nef_theano as nef
 import space
 from java.awt import Color
 import ccm

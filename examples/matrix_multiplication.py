@@ -1,6 +1,6 @@
 # Perform matrix multiplication on arbitrary matrices
 
-import nef
+import nef.nef_theano as nef
 
 net=nef.Network('Matrix Multiplication',quick=True) #Create the network object
 

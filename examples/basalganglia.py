@@ -1,4 +1,4 @@
-import nef
+import nef.nef_theano as nef
 import nps
 
 D=5

@@ -1,6 +1,6 @@
+import nef.nef_theano as nef
 from __future__ import generators
 import sys
-import nef
 
 import space
 

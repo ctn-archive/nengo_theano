@@ -1,4 +1,4 @@
-import nef
+import nef.nef_theano as nef
 
 net=nef.Network('Multiplication') #Create the network object
 

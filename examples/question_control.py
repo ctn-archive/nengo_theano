@@ -1,7 +1,7 @@
 D=16  # number of dimensions for representations 
 N=100 # number of neurons per dimension
 
-import nef
+import nef.nef_theano as nef
 import nps
 import nef.convolution
 import hrr
