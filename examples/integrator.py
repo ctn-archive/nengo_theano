@@ -14,6 +14,5 @@ net.connect('input','A',weight=0.1,pstc=0.1) #Connect the input to the integrato
                                              #time constant is 10ms
 net.connect('A','A',pstc=0.1) #Connect the population to itself with the 
                               #default weight of 1
-net.add_to_nengo()
 
-
+net.run(1) # run for 1 second

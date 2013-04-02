@@ -14,4 +14,5 @@ net.connect('A','A',[[1,1],[-1,1]],pstc=0.1) #Recurrently connect the population
                                          #with the connection matrix for a 
                                          #simple harmonic oscillator mapped 
                                          #to neurons with the NEF
-net.add_to_nengo()
+
+net.run(1) # run for 1 second

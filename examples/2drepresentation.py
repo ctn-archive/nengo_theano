@@ -9,6 +9,5 @@ net.make('neurons',100,2)             # Create a population with 100 neurons
                                       # representing 2 dimensions
                                       
 net.connect('input','neurons')        # Connect the input to the neurons
-net.add_to_nengo()
 
-
+net.run(1) # run for 1 second

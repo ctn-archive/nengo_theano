@@ -15,6 +15,5 @@ net.make('neuron',neurons=2,dimensions=1,      # Make 2 neurons representing
                                                #  and a noise of variance 3
 
 net.connect('input','neuron')         # Connect the input to the neuron
-net.add_to_nengo()
 
-
+net.run(1) # run for 1 second

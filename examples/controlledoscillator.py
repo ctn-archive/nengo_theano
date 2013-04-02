@@ -24,4 +24,4 @@ def controlled_path(x):
         
 net.connect('Oscillator', 'Oscillator', func=controlled_path, pstc=tau)
 
-net.add_to_nengo()
+net.run(1) # run for 1 second

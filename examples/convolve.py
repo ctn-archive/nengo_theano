@@ -17,8 +17,4 @@ conv=nef.convolution.make_convolution(net,'*','A','B','C',100)
                 #Call the code to construct a convolution network using 
                 #the created populations and 100 neurons per dimension
 
-net.add_to_nengo()
-
-
-
-
+net.run(1) # run for 1 second

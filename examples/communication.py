@@ -10,4 +10,5 @@ net.make('B',100,1)   #Make a population with 100 neurons, 1 dimension
 
 net.connect('input','A') #Connect all the relevant objects
 net.connect('A','B')
-net.add_to_nengo()
+
+net.run(1) # run for 1 second

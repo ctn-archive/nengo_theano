@@ -2,7 +2,7 @@
 
 import nef.nef_theano as nef
 
-net=nef.Network('Matrix Multiplication',quick=True) #Create the network object
+net=nef.Network('Matrix Multiplication') #Create the network object
 
 # Adjust these values to change the matrix dimensions
 #  Matrix A is D1xD2
@@ -63,4 +63,4 @@ def product(x):
 # combine D2 pairs of elements (we sum D2 products together)    
 net.connect('C','D',index_post=[i/D2 for i in range(D1*D2*D3)],func=product)
 
-net.add_to_nengo()
+net.run(1) # run for 1 second

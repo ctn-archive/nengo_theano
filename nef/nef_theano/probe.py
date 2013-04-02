@@ -17,6 +17,15 @@ class Probe(object):
     buffer_size = 1000
 
     def __init__(self, name, network, target, target_name, dt_sample, pstc=0.03):
+        """
+        :param string name:
+        :param Network network:
+        :param target:
+        :type target: 
+        :param string target_name:
+        :param float dt_sample:
+        :param float pstc:
+        """
         self.name = name
         self.target = target
         self.target_name = target_name
@@ -30,9 +39,13 @@ class Probe(object):
         self.filter = Filter(network.dt, pstc, source=target)
 
     def update(self):
+        """
+        """
         return self.filter.update()
 
     def theano_tick(self):
+        """
+        """
         i_samp = int(np.floor(self.t / self.dt_sample))
         if i_samp > self.i:
             # we're as close to a sample point as we're going to get,
@@ -48,4 +61,6 @@ class Probe(object):
             self.i = i_samp
 
     def get_data(self):
+        """
+        """
         return self.data[:self.i+1]

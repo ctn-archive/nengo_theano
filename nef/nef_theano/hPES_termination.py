@@ -8,10 +8,12 @@ from . import neuron
 from .learned_termination import LearnedTermination
 
 class hPESTermination(LearnedTermination):
+    """
     # learning_rate = 5e-7      # from nengo
     # theta_tau = 20.           # from nengo
     # scaling_factor = 20e3     # from nengo
     # supervision_ratio = 0.5   # from nengo
+    """
 
     learning_rate = TT.cast(5e-3, dtype='float32')
     theta_tau = 0.02
@@ -19,6 +21,8 @@ class hPESTermination(LearnedTermination):
     supervision_ratio = 1.0
 
     def __init__(self, *args, **kwargs):
+        """
+        """
         super(hPESTermination, self).__init__(*args, **kwargs)
 
         # get the theano instantaneous spike raster
@@ -45,10 +49,14 @@ class hPESTermination(LearnedTermination):
             self.post_spikes.get_value(), name='hPES.post_filtered')
 
     def reset(self):
+        """
+        """
         super(hPESTermination, self).reset()
         self.theta.set_value(self.initial_theta)
 
     def learn(self):
+        """
+        """
         # get the error as represented by the post neurons
         encoded_error = TT.sum(self.encoders * TT.reshape( self.error_value, 
             (self.post.array_size, 1, self.post.dimensions)) , axis=-1)
@@ -99,6 +107,8 @@ class hPESTermination(LearnedTermination):
         return int(np.ceil((i + 1) / float(self.post.array_size)) - 1)
         
     def update(self):
+        """
+        """
         # update filtered inputs
         alpha = TT.cast(self.dt / self.pstc, dtype='float32')
         new_pre = self.pre_filtered + alpha * (

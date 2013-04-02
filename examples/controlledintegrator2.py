@@ -26,6 +26,5 @@ net.connect('A','A',transform=[1,0],func=feedback,pstc=0.1) #Create the recurren
                                                         #1D function 'feedback'
                                                         #into the 2D population
                                                         #using the 1x2 transform
-net.add_to_nengo()
 
-
+net.run(1) # run for 1 second

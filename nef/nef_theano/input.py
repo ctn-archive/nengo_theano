@@ -13,19 +13,19 @@ class Input(object):
     Any callable can be used an input function.
 
     """
-    def __init__(self, name, value, zero_after=None):
+    def __init__(self, name, value, zero_after_time=None):
         """
         :param string name: name of the function input
         :param value: defines the output decoded_output
         :type value: float or function
-        :param float zero_after:
+        :param float zero_after_time:
             time after which to set function output = 0 (s)
         
         """
         self.name = name
         self.t = 0
         self.function = None
-        self.zero_after = zero_after
+        self.zero_after_time = zero_after_time
         self.zeroed = False
         self.origin = {}
 
@@ -49,7 +49,7 @@ class Input(object):
             return
 
         # zero output
-        if self.zero_after is not None and self.t > self.zero_after:
+        if self.zero_after_time is not None and self.t > self.zero_after_time:
             self.origin['X'].decoded_output.set_value(
                 np.float32(np.zeros(self.origin['X'].dimensions)))
             self.zeroed = True
