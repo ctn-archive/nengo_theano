@@ -1,4 +1,4 @@
-import nef
+import nef.nef_theano as nef
 
 net=nef.Network('2D Representation')  # Create the network
 

@@ -1,7 +1,7 @@
 N=60
 D=1
 
-import nef
+import nef.nef_theano as nef
 import nef.templates.learned_termination as learning
 import nef.templates.gate as gating
 import random

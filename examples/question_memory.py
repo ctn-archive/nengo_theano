@@ -3,7 +3,7 @@ subdim=4
 N=100
 seed=7
 
-import nef
+import nef.nef_theano as nef
 import nef.convolution
 import hrr
 import math

@@ -1,4 +1,4 @@
-import nef
+import nef.nef_theano as nef
 
 net=nef.Network('Two Neurons')        # Create the network
 net.make_input('input',[-0.45])       # Create a controllable input

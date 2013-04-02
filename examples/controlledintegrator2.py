@@ -1,4 +1,4 @@
-import nef
+import nef.nef_theano as nef
 
 #This implements the controlled integrator described in the
 #book "How to build a brain"
