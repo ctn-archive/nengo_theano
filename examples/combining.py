@@ -16,8 +16,7 @@ net.make('C',100,2,
 net.connect('input A','A') #Connect all the relevant objects (default connection 
                            #is identity)
 net.connect('input B','B')
-net.connect('A','C',transform=[1,0]) #Connect with the given 1x2D mapping matrix
-net.connect('B','C',transform=[0,1])
-net.add_to_nengo()
+net.connect('A','C', index_post=0) #Connect with the given 1x2D mapping matrix
+net.connect('B','C', index_post=1)
 
-
+net.run(1) # run for 1 second

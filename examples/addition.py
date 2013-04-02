@@ -15,6 +15,5 @@ net.connect('input A','A') #Connect all the relevant objects
 net.connect('input B','B')
 net.connect('A','C')
 net.connect('B','C')
-net.add_to_nengo()
 
-
+net.run(1) # run for 1 second

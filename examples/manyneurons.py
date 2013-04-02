@@ -9,5 +9,5 @@ net.make('neurons',neurons=100,       # Make a population of 100 neurons,
                                       #  injected input noise of variance 1
 
 net.connect('input','neurons')        # Connect the input to the neuron
-net.add_to_nengo()
 
+net.run(1) # run for 1 second
