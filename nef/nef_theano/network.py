@@ -590,7 +590,7 @@ class Network(object):
                             t_stop=len(probe.data),
                             target_name=probe.target_name) )
             else: 
-                print 'Do not know how to write %s to file'%probe.target_name
+                print 'Do not know how to write %s to NeoHDF5 file'%probe.target_name
                 assert False
 
         # write block to file

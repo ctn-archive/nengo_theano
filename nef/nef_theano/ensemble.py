@@ -389,12 +389,12 @@ class Ensemble:
                 (self.array_size, self.neurons_num, self.dimensions))
         else:
             # if encoders were specified, cast list as array
-            encoders = np.array(encoders)
+            encoders = np.array(encoders).T
             # repeat array until 'encoders' is the same length
             # as number of neurons in population
             encoders = np.tile(encoders,
                 (self.neurons_num / len(encoders) + 1)
-                               )[:self.neurons_num, :self.dimensions]
+                               ).T[:self.neurons_num, :self.dimensions]
             encoders = np.tile(encoders, (self.array_size, 1, 1))
 
         # normalize encoders across represented dimensions 
