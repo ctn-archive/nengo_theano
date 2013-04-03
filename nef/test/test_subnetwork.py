@@ -1,13 +1,11 @@
 """Test of Network.make_subnetwork(), which should allow for easy nesting of
 collections of ensembles.
-
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from .. import nef_theano as nef
-
 
 net=nef.Network('Main')
 
@@ -18,7 +16,6 @@ net.make('X',50,1)
 netA.make('Y',50,1)
 netB.make('Z',50,1)
 netB.make('W',50,1)
-
 
 netB.connect('Z','W')     # connection within a subnetwork
 net.connect('X','A.Y')    # connection into a subnetwork
@@ -34,7 +31,4 @@ net.connect('A.C.J','X')    # connection out of a subsubnetwork
 net.connect('A.C.J','B.Z')  # connection across subsubnetworks
 netA.connect('Y','C.J')     # connection across subnetworks
 
-
-
-
-
+net.run(1) # run for 1 second
