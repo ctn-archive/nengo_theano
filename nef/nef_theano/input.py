@@ -27,11 +27,22 @@ class Input(object):
         self.function = None
         self.zero_after_time = zero_after_time
         self.zeroed = False
+        self.change_time = None
         self.origin = {}
 
         # if value parameter is a python function
         if callable(value): 
             self.origin['X'] = origin.Origin(func=value)
+        # if value is dict of time:value pairs
+        elif isinstance(value, dict):
+            self.change_time = sorted(value.keys())[0]
+            # check for size of dict elements
+            if isinstance(value[self.change_time], list):
+                initial_value = np.zeros(len(value[self.change_time]))
+            else: initial_value = np.zeros(1)
+            self.origin['X'] = origin.Origin(func=None, 
+                initial_value=initial_value)
+            self.values = value
         else:
             self.origin['X'] = origin.Origin(func=None, initial_value=value)
 
@@ -53,6 +64,15 @@ class Input(object):
             self.origin['X'].decoded_output.set_value(
                 np.float32(np.zeros(self.origin['X'].dimensions)))
             self.zeroed = True
+    
+        # change value
+        if self.change_time is not None and self.t > self.change_time:
+            self.origin['X'].decoded_output.set_value(
+                np.float32(np.array([self.values[self.change_time]])))
+            index = sorted(self.values.keys()).index(self.change_time) 
+            if index < len(self.values) - 1:
+                self.change_time = sorted(self.values.keys())[index+1]
+            else: self.change_time = None
 
         # update output decoded_output
         if self.origin['X'].func is not None:
