@@ -10,8 +10,8 @@ class LearnedTermination(object):
     """This is the superclass learned_termination that attaches
     to an ensemble."""
 
-    def __init__(self, pre, post, error, initial_weight_matrix,
-                 dt=1e-3, pstc=5e-3):
+    def __init__(self, pre, post, error, weight_matrix,
+                 dt=1e-3, pstc=5e-3, rate=5e-3):
         """
         :param Ensemble pre: the pre-synaptic ensemble
         :param Ensemble ensemble:
@@ -26,9 +26,10 @@ class LearnedTermination(object):
         self.pre = pre
         self.post = post
         self.error = error
+        self.learning_rate = TT.cast(rate, dtype='float32')
 
         # initialize weight matrix
-        self.initial_weight_matrix = initial_weight_matrix.astype('float32')
+        self.initial_weight_matrix = weight_matrix.astype('float32')
         self.weight_matrix = theano.shared(
             self.initial_weight_matrix, name='learned_termination.weight_matrix')
 
