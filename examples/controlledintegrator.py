@@ -12,14 +12,14 @@ net.make_input('control',[1])  #Create a controllable input function
 net.make('A',225,2,radius=1.5) #Make a population with 225 neurons, 2 dimensions, and a 
                                #larger radius to accommodate large simulataneous inputs
                                
-net.connect('input','A',transform=[0.1,0],pstc=0.1) #Connect all the relevant
+net.connect('input','A', index_post=0, weight=.1, pstc=0.1) #Connect all the relevant
                                                 #objects with the relevant 1x2
                                                 #mappings, postsynaptic time
                                                 #constant is 10ms
-net.connect('control','A',transform=[0,1],pstc=0.1)
+net.connect('control','A', index_post=1,pstc=0.1)
 def feedback(x):
     return x[0]*x[1]
-net.connect('A','A',transform=[1,0],func=feedback,pstc=0.1) #Create the recurrent
+net.connect('A','A', index_post=0, func=feedback,pstc=0.1) #Create the recurrent
                                                         #connection mapping the
                                                         #1D function 'feedback'
                                                         #into the 2D population
