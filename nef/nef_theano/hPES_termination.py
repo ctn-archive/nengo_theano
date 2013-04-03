@@ -15,7 +15,6 @@ class hPESTermination(LearnedTermination):
     # supervision_ratio = 0.5   # from nengo
     """
 
-    learning_rate = TT.cast(5e-3, dtype='float32')
     theta_tau = 0.02
     scaling_factor = 10.
     supervision_ratio = 1.0

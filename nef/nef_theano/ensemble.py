@@ -303,8 +303,9 @@ class Ensemble:
         elif learn_input:
             self.accumulators[pstc].add_learn_input(learn_input)
 
-    def add_learned_termination(self, pre, error, pstc, weight_matrix=None,
-                                learned_termination_class=hPESTermination):
+    def add_learned_termination(self, pre, error, pstc, 
+                                learned_termination_class=hPESTermination,
+                                **kwargs):
         """Adds a learned termination to the ensemble.
 
         Accounting for the additional input_current is still done
@@ -315,27 +316,27 @@ class Ensemble:
 
         :param Ensemble pre: the pre-synaptic population
         :param Ensemble error: the Origin that provides the error signal
-        :param list weight_matrix:
-            the initial connection weights with which to start
-        
+        :param float pstc:
+        :param learned_termination_class:
         """
         #TODO: is there ever a case we wouldn't want this?
         assert error.dimensions == self.dimensions * self.array_size
 
         # generate an initial weight matrix if none provided,
         # random numbers between -.001 and .001
-        if weight_matrix is None:
+        if 'weight_matrix' not in kwargs.keys():
             weight_matrix = np.random.uniform(
                 size=(self.array_size * pre.array_size,
                       self.neurons_num, pre.neurons_num),
                 low=-.001, high=.001)
+            kwargs['weight_matrix'] = weight_matrix
         else:
             # make sure it's an np.array
             #TODO: error checking to make sure it's the right size
-            weight_matrix = np.array(weight_matrix) 
+            kwargs['weight_matrix'] = np.array(kwargs['weight_matrix']) 
 
         learned_term = learned_termination_class(
-            pre, self, error, weight_matrix)
+            pre=pre, post=self, error=error, **kwargs)
 
         learn_projections = [TT.dot(
             pre.neurons.output[learned_term.pre_index(i)],  

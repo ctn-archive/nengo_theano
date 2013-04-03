@@ -377,7 +377,7 @@ class Network(object):
 
         return obj
 
-    def learn(self, pre, post, error, pstc=0.01, weight_matrix=None):
+    def learn(self, pre, post, error, pstc=0.01, **kwargs):
         """Add a connection with learning between pre and post,
         modulated by error. Error can be a Node, or an origin. If no 
         origin is specified in the format node:origin, then 'X' is used.
@@ -392,7 +392,7 @@ class Network(object):
         pre = self.get_object(pre)
         post = self.get_object(post)
         error = self.get_origin(error)
-        return post.add_learned_termination(pre, error, pstc, weight_matrix)
+        return post.add_learned_termination(pre, error, pstc, **kwargs)
 
     def make(self, name, *args, **kwargs): 
         """Create and return an ensemble of neurons.
