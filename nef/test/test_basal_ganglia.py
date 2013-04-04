@@ -3,17 +3,21 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import math
 
 from .. import nef_theano as nef
 from .. import templates
 
 net = nef.Network('BG Test')
-net.make_input('in', [1], zero_after_time=1.0)
-net.add(templates.basalganglia.make_basal_ganglia(net=net, name='BG'))
+def func(x):
+    return [math.sin(x), .5,.2]
+net.make_input('in', value=func)
+templates.basalganglia.make_basal_ganglia(
+    net=net, name='BG', dimensions=3)
 
 net.connect('in', 'BG.input')
 
-timesteps = 200
+timesteps = 1000
 dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01
