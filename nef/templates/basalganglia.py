@@ -7,9 +7,9 @@ def make_basal_ganglia(net, name='Basal Ganglia', dimensions=1, neurons=100,
     netbg = net.make_subnetwork(name)
 
     #TODO: make direct mode, implement with 1 neuron in direct mode
-    netbg.make('input', neurons=neurons, dimensions=dimensions)
+    netbg.make('input', neurons=neurons*dimensions, dimensions=dimensions)
     #TODO: make direct mode, implement with 1 neuron in direct mode
-    netbg.make('output', neurons=1, dimensions=dimensions)
+    netbg.make('output', neurons=neurons*dimensions, dimensions=dimensions)
 
     # connection weights from (Gurney, Prescott, & Redgrave, 2001)
     mm=1; mp=1; me=1; mg=1
@@ -42,23 +42,23 @@ def make_basal_ganglia(net, name='Basal Ganglia', dimensions=1, neurons=100,
 
     # connect the striatum to the GPi and GPe (inhibitory)
     def func_str(x):
-        if x[0]<e: return 0
-        return mm*(x[0]-e)
+        if x[0] < e: return 0
+        return mm * (x[0] - e)
     netbg.connect('StrD1', 'GPi', func=func_str, weight=-wm, pstc=tau_gaba)
     netbg.connect('StrD2', 'GPe', func=func_str, weight=-wm, pstc=tau_gaba)
 
     # connect the STN to GPi and GPe (broad and excitatory)
     def func_stn(x):
-        if x[0]<ep: return 0
-        return mp*(x[0]-ep)
+        if x[0] < ep: return 0
+        return mp * (x[0] - ep)
     tr = [[wp] * dimensions for i in range(dimensions)]    
     netbg.connect('STN', 'GPi', func=func_stn, transform=tr, pstc=tau_ampa)
     netbg.connect('STN', 'GPe', func=func_stn, transform=tr, pstc=tau_ampa)        
 
     # connect the GPe to GPi and STN (inhibitory)
     def func_gpe(x):
-        if x[0]<ee: return 0
-        return me*(x[0]-ee)
+        if x[0] < ee: return 0
+        return me * (x[0] - ee)
     netbg.connect('GPe', 'GPi', func=func_gpe, weight=-we, pstc=tau_gaba)
     netbg.connect('GPe', 'STN', func=func_gpe, weight=-wg, pstc=tau_gaba)
 
