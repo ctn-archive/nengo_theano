@@ -29,10 +29,8 @@ net.make_input('in', value=math.sin)
 # for test 1
 net.make('A1', neurons=300, dimensions=1)
 # for test 2
-print 'here'
 net.make('A2', neurons=300, dimensions=1, eval_points=eval_points)
 # for test 3
-print 'here2'
 net.make('A3', neurons=300, dimensions=1, eval_points=eval_points)
 
 net.make('B', neurons=100, dimensions=1)
@@ -45,10 +43,8 @@ def pow(x):
 
 # create origins with eval_points
 # for test 1
-print 'here3'
 net.nodes['A1'].add_origin('pow', func=pow, eval_points=eval_points)
 # for test 3
-print 'here 4'
 net.nodes['A3'].add_origin('pow', func=pow, eval_points=eval_points)
 
 net.connect('in', 'A1')

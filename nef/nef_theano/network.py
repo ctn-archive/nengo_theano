@@ -14,7 +14,7 @@ from . import input
 from . import subnetwork
 
 class Network(object):
-    def __init__(self, name, seed=None, fixed_seed=None):
+    def __init__(self, name, seed=None, fixed_seed=None, dt=.001):
         """Wraps an NEF network with a set of helper functions
         for simplifying the creation of NEF models.
 
@@ -28,7 +28,7 @@ class Network(object):
 
         """
         self.name = name
-        self.dt = 0.001
+        self.dt = dt
         self.run_time = 0.0    
         self.seed = seed
         self.fixed_seed = fixed_seed
@@ -207,6 +207,7 @@ class Network(object):
         # get the origin from the pre Node
         pre_origin = self.get_origin(pre, func)
         # get pre Node object from node dictionary
+        pre_name = pre
         pre = self.get_object(pre)
 
         # get decoded_output from specified origin
@@ -275,7 +276,7 @@ class Network(object):
 
                     # pass in the pre population encoded output function
                     # to the post population, connecting them for theano
-                    post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
+                    post.add_termination(name=pre_name, pstc=pstc, encoded_input=encoded_output)
                     return
                                    
                 else: # otherwise we're in case 2
@@ -293,7 +294,7 @@ class Network(object):
                     encoded_output = TT.reshape(encoded_output, (post.array_size, post.neurons_num))
                     # pass in the pre population encoded output function
                     # to the post population, connecting them for theano
-                    post.add_filtered_input(pstc=pstc, encoded_input=encoded_output)
+                    post.add_termination(name=pre_name, pstc=pstc, encoded_input=encoded_output)
                     return
         
         # if decoded-decoded connection (case 1)
@@ -313,7 +314,7 @@ class Network(object):
 
         # pass in the pre population decoded output function
         # to the post population, connecting them for theano
-        post.add_filtered_input(pstc=pstc, decoded_input=decoded_output) 
+        post.add_termination(name=pre_name, pstc=pstc, decoded_input=decoded_output) 
     
     def get_object(self, name):
         """This is a method for parsing input to return the proper object.
@@ -389,10 +390,12 @@ class Network(object):
             the initial connection weights with which to start
 
         """
+        pre_name = pre
         pre = self.get_object(pre)
         post = self.get_object(post)
         error = self.get_origin(error)
-        return post.add_learned_termination(pre, error, pstc, **kwargs)
+        return post.add_learned_termination(name=pre_name, pre=pre, error=error, 
+            pstc=pstc, **kwargs)
 
     def make(self, name, *args, **kwargs): 
         """Create and return an ensemble of neurons.
@@ -480,16 +483,16 @@ class Network(object):
             # set the filter to zero
             kwargs['pstc'] = 0
 
-        p = probe.Probe(name=name, network=self, target=target, 
-                        target_name=target_name, dt_sample=dt_sample, **kwargs)
+        p = probe.Probe(name=name, target=target, target_name=target_name, 
+            dt_sample=dt_sample, **kwargs)
         self.add(p)
         return p
             
-    def make_theano_tick(self):
+    def make_theano_tick(self, dt):
         """Generate the theano function for running the network simulation.
         
+        :param float dt: the timestep of the update
         :returns: theano function
-        
         """
 
         # dictionary for all variables
@@ -501,12 +504,12 @@ class Network(object):
             # if there is some variable to update
             if hasattr(node, 'update'):
                 # add it to the list of variables to update every time step
-                updates.update(node.update())
+                updates.update(node.update(dt))
 
         # create graph and return optimized update function
         return theano.function([], [], updates=updates)
 
-    def run(self, time):
+    def run(self, time, dt=.001):
         """Run the simulation.
 
         If called twice, the simulation will continue for *time*
@@ -514,11 +517,11 @@ class Network(object):
         dt timestep specified when they are created.
         
         :param float time: the amount of time (in seconds) to run
-        
+        :param float dt: the timestep of the update
         """         
         # if theano graph hasn't been calculated yet, retrieve it
         if self.theano_tick is None:
-            self.theano_tick = self.make_theano_tick() 
+            self.theano_tick = self.make_theano_tick(dt) 
 
         for i in range(int(time / self.dt)):
             # get current time step
@@ -535,7 +538,7 @@ class Network(object):
         # update run_time variable
         self.run_time += time
 
-    def write_data_to_hd5(self, filename='data'):
+    def write_data_to_hdf5(self, filename='data'):
         """This is a function to call after simulation that writes the 
         data of all probes to filename using the Neo HDF5 IO module.
     

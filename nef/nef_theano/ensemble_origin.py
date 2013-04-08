@@ -46,6 +46,8 @@ class EnsembleOrigin(Origin):
         :param list eval_points:
             specific set of points to optimize decoders over 
         """
+        dt = .001 # timestep for simulation
+
         key = self.ensemble.cache_key
         if eval_points == None:  
             # generate sample points from state space randomly
@@ -117,7 +119,7 @@ class EnsembleOrigin(Origin):
                 # accumulating spikes to get a spike rate
                 #TODO: is this long enough? Should it be less?
                 # If we do less, we may get a good noise approximation!
-                A = neuron.accumulate(J, neurons)
+                A = neuron.accumulate(J, neurons, dt)
 
                 # compute Gamma and Upsilon
                 G = np.dot(A, A.T) # correlation matrix
@@ -155,7 +157,7 @@ class EnsembleOrigin(Origin):
             U = np.dot(A, target_values.T)
             
             # compute decoders - least squares method 
-            decoders[index] = np.dot(Ginv, U) / (self.ensemble.neurons.dt)
+            decoders[index] = np.dot(Ginv, U) / dt
 
         self.decoders = theano.shared(decoders.astype('float32'), 
             name='ensemble_origin.decoders')

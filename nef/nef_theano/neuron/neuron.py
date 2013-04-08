@@ -3,7 +3,7 @@ from theano import tensor as TT
 import numpy as np
 
 
-def accumulate(input, neuron, time=1.0, init_time=0.05):
+def accumulate(input, neuron, dt, time=1.0, init_time=0.05):
     """Accumulates neuron output over time.
 
     Take a neuron model, run it for the given amount of time with
@@ -26,7 +26,7 @@ def accumulate(input, neuron, time=1.0, init_time=0.05):
     ### make the standard neuron update function
 
     # updates is dictionary of variables returned by neuron.update
-    updates = neuron.update(input.astype('float32'))
+    updates = neuron.update(input.astype('float32'), dt)
 
     # update all internal state variables listed in updates
     tick = theano.function([], [], updates=updates)
@@ -40,10 +40,10 @@ def accumulate(input, neuron, time=1.0, init_time=0.05):
     #, mode=theano.Mode(optimizer=None, linker='py'))
 
     # call the standard one a few times to avoid startup transients
-    tick.fn(n_calls = int(init_time / neuron.dt))
+    tick.fn(n_calls = int(init_time / dt))
 
     # call the accumulator version a bunch of times
-    accumulate_spikes.fn(n_calls = int(time / neuron.dt))
+    accumulate_spikes.fn(n_calls = int(time / dt))
 
     return total.get_value().astype('float32') / time
 
@@ -56,15 +56,13 @@ class Neuron(object):
 
     """
 
-    def __init__(self, size, dt):
+    def __init__(self, size):
         """Constructor for neuron model superclass.
 
         :param int size: number of neurons in this population
-        :param float dt: size of timestep taken during update
 
         """
         self.size = size
-        self.dt = dt
         # set up theano internal state variable
         self.output = theano.shared(np.zeros(size).astype('float32'), 
                                     name='neuron.output')

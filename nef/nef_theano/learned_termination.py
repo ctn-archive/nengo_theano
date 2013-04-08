@@ -11,7 +11,7 @@ class LearnedTermination(object):
     to an ensemble."""
 
     def __init__(self, pre, post, error, weight_matrix,
-                 dt=1e-3, pstc=5e-3, rate=5e-3):
+                 pstc=5e-3, rate=5e-3):
         """
         :param Ensemble pre: the pre-synaptic ensemble
         :param Ensemble ensemble:
@@ -20,7 +20,6 @@ class LearnedTermination(object):
         :param np.array weight_matrix:
             the connection weight matrix between pre and post
         """
-        self.dt = dt
         self.pstc = pstc
 
         self.pre = pre

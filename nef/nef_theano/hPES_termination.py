@@ -105,18 +105,18 @@ class hPESTermination(LearnedTermination):
         """
         return int(np.ceil((i + 1) / float(self.post.array_size)) - 1)
         
-    def update(self):
+    def update(self, dt):
         """
         """
         # update filtered inputs
-        alpha = TT.cast(self.dt / self.pstc, dtype='float32')
+        alpha = TT.cast(dt / self.pstc, dtype='float32')
         new_pre = self.pre_filtered + alpha * (
             self.pre_spikes - self.pre_filtered)
         new_post = self.post_filtered + alpha * (
             self.post_spikes - self.post_filtered)
 
         # update theta
-        alpha = TT.cast(self.dt / self.theta_tau, dtype='float32')
+        alpha = TT.cast(dt / self.theta_tau, dtype='float32')
         new_theta = self.theta + alpha * (new_post - self.theta)
 
         return collections.OrderedDict({

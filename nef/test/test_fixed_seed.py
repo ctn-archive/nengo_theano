@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from .. import nef_theano as nef
 
 net = nef.Network('Array Test', fixed_seed=5)
-net.make_input('in', [1], zero_after=1.0)
+net.make_input('in', [1], zero_after_time=1.0)
 net.make('A', 50, 1)
 net.make('B', 50, 1)
 net.make_array('AB', 50, 2)

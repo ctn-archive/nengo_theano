@@ -16,10 +16,9 @@ class Probe(object):
     """
     buffer_size = 1000
 
-    def __init__(self, name, network, target, target_name, dt_sample, pstc=0.03):
+    def __init__(self, name, target, target_name, dt_sample, pstc=0.03):
         """
         :param string name:
-        :param Network network:
         :param target:
         :type target: 
         :param string target_name:
@@ -36,12 +35,13 @@ class Probe(object):
         self.i = -1 # index of the last sample taken
 
         # create a filter to filter the data
-        self.filter = Filter(network.dt, pstc, source=target)
+        self.filter = Filter(pstc, source=target)
 
-    def update(self):
+    def update(self, dt):
         """
+        :param float dt: the timestep of the update
         """
-        return self.filter.update()
+        return self.filter.update(dt)
 
     def theano_tick(self):
         """
