@@ -19,7 +19,7 @@ net.make('B', 5, 1)
 net.connect('in', 'A')
 net.connect('in', 'B')
 
-timesteps = 70000
+timesteps = 100
 dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01

@@ -8,16 +8,15 @@ from .neuron import Neuron
 # an example of implementing a rate-mode neuron
 
 class LIFRateNeuron(Neuron):
-    def __init__(self, size, dt=0.001, tau_rc=0.02, tau_ref=0.002):
+    def __init__(self, size, tau_rc=0.02, tau_ref=0.002):
         """Constructor for a set of LIF rate neuron
 
         :param int size: number of neurons in set
-        :param float dt: timestep for neuron update function
         :param float t_rc: the RC time constant
         :param float tau_ref: refractory period length (s)
 
         """
-        Neuron.__init__(self, size, dt)
+        Neuron.__init__(self, size)
         self.tau_rc = tau_rc
         self.tau_ref = tau_ref
 

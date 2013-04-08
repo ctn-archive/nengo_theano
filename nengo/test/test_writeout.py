@@ -38,7 +38,7 @@ sim_time_end = time.time()
 print "\nBuild time: %0.10fs" % (build_time_end - build_time_start)
 print "Sim time: %0.10fs" % (sim_time_end - build_time_end)
 
-net.write_data()
+net.write_data_to_hdf5()
 
 # open up hdf5 file 
 iom = hdf5io.NeoHdf5IO(filename='data.hd5')

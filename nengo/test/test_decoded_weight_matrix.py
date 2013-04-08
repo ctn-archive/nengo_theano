@@ -21,7 +21,7 @@ array_size = 3
 inhib_scale = 10
 
 net = nef.Network('WeightMatrix Test')
-net.make_input('in1', 1, zero_after=2.5)
+net.make_input('in1', 1, zero_after_time=2.5)
 net.make_input('in2', [1, .5, -.5])
 net.make('A', neurons=neurons, dimensions=dimensions, intercept=(.1, 1))
 net.make('B', neurons=neurons, dimensions=dimensions) # for test 1

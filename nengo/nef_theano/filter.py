@@ -7,16 +7,14 @@ import theano.tensor as TT
 class Filter:
     """Filter an arbitrary theano.shared"""
 
-    def __init__(self, dt, pstc, name=None, source=None, shape=None):
+    def __init__(self, pstc, name=None, source=None, shape=None):
         """
-        :param float dt:
         :param float pstc:
         :param string name:
         :param source:
         :type source:
         :param tuple shape:
         """
-        self.dt = dt
         self.pstc = pstc
         self.source = source
 
@@ -43,14 +41,15 @@ class Filter:
         """
         self.source = source
 
-    def update(self):
+    def update(self, dt):
         """
+        :param float dt: the timestep of the update
         """
         if self.pstc > 0:
-            decay = TT.cast(np.exp(-self.dt / self.pstc), self.value.dtype)
-            value_new = decay*self.value + (1 - decay)*self.source
-            return collections.OrderedDict([(self.value, value_new)])
+            decay = TT.cast(np.exp(-dt / self.pstc), self.value.dtype)
+            value_new = decay * self.value + (1 - decay) * self.source
+            return collections.OrderedDict([(self.value, value_new.astype('float32'))])
         else:
             ### no filtering (pstc = 0), so just make the value the source
-            return collections.OrderedDict([(self.value, self.source)])
+            return collections.OrderedDict([(self.value, self.source.astype('float32'))])
 
