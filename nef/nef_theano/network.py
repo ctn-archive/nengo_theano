@@ -116,14 +116,15 @@ class Network(object):
 
             for i in range(array_size):
                 for j in range(dim_post):
-                    array_transform[i][j] = transform[i*dim_post + j]
+                    array_transform[i][j] = transform[i * dim_post + j]
 
             transform = array_transform
 
         return transform
         
     def connect(self, pre, post, transform=None, weight=1,
-                index_pre=None, index_post=None, pstc=0.01, func=None):
+                index_pre=None, index_post=None, pstc=0.01, 
+                func=None):
         """Connect two nodes in the network.
         
         Note: cannot specify (transform) AND any of
@@ -241,8 +242,6 @@ class Network(object):
             if transform.shape[0] != post.dimensions * post.array_size \
                                                 or len(transform.shape) > 2:
 
-                #TODO: make sure all these reshapes are reshaping the right way
-
                 if transform.shape[0] == post.array_size * post.neurons_num:
                     transform = transform.reshape(
                                       [post.array_size, post.neurons_num] +\
@@ -260,23 +259,32 @@ class Network(object):
                                         [post.array_size, post.neurons_num,  
                                               pre.array_size, pre.neurons_num])
                     assert transform.shape == \
-                            (post.array_size, post.neurons_num, pre.array_size, pre.neurons_num)
+                            (post.array_size, post.neurons_num, 
+                             pre.array_size, pre.neurons_num)
                     
                     # get spiking output from pre population
                     pre_output = pre.neurons.output 
 
-                    encoded_output = TT.mul( TT.reshape(transform, (post.array_size, post.neurons_num, pre.array_size, pre.neurons_num)), 
-                                             TT.reshape(pre_output, (pre.array_size, pre.neurons_num)) )
-                    # sum the contribution from all pre neurons for each post neuron 
+                    encoded_output = TT.mul( 
+                        TT.reshape(transform, (post.array_size, post.neurons_num, 
+                        pre.array_size, pre.neurons_num)), TT.reshape(pre_output, 
+                        (pre.array_size, pre.neurons_num)) )
+
+                    # sum the contribution from all pre neurons 
+                    # for each post neuron 
                     encoded_output = TT.sum(encoded_output, axis=3)
-                    # sum the contribution from each of the pre arrays for each post neuron
+                    # sum the contribution from each of the 
+                    # pre arrays for each post neuron
                     encoded_output = TT.sum(encoded_output, axis=2)
                     # reshape to get rid of the extra dimension
-                    encoded_output = TT.reshape(encoded_output, (post.array_size, post.neurons_num))
+                    encoded_output = TT.reshape(encoded_output, 
+                        (post.array_size, post.neurons_num))
 
                     # pass in the pre population encoded output function
                     # to the post population, connecting them for theano
-                    post.add_termination(name=pre_name, pstc=pstc, encoded_input=encoded_output)
+                    post.add_termination(name=pre_name, pstc=pstc, 
+                        encoded_input=encoded_output)
+
                     return
                                    
                 else: # otherwise we're in case 2
@@ -287,14 +295,19 @@ class Network(object):
                     assert func == None 
     
                     pre_output = TT.stack([pre_output] * post.neurons_num)
-                    encoded_output = TT.batched_dot( TT.reshape(transform, (post.array_size, post.neurons_num, dim_pre)),
-                                                     TT.reshape(pre_output, (post.neurons_num, dim_pre, 1)) )
+                    encoded_output = TT.batched_dot( TT.reshape(transform, 
+                        (post.array_size, post.neurons_num, dim_pre)),
+                        TT.reshape(pre_output, (post.neurons_num, dim_pre, 1)) )
     
-                    # at this point encoded output should be (post.array_size x post.neurons_num x 1)
-                    encoded_output = TT.reshape(encoded_output, (post.array_size, post.neurons_num))
+                    # at this point encoded output should be 
+                    # (post.array_size x post.neurons_num x 1)
+                    encoded_output = TT.reshape(encoded_output, 
+                        (post.array_size, post.neurons_num))
                     # pass in the pre population encoded output function
                     # to the post population, connecting them for theano
-                    post.add_termination(name=pre_name, pstc=pstc, encoded_input=encoded_output)
+                    post.add_termination(name=pre_name, pstc=pstc, 
+                        encoded_input=encoded_output)
+
                     return
         
         # if decoded-decoded connection (case 1)
@@ -314,7 +327,8 @@ class Network(object):
 
         # pass in the pre population decoded output function
         # to the post population, connecting them for theano
-        post.add_termination(name=pre_name, pstc=pstc, decoded_input=decoded_output) 
+        post.add_termination(name=pre_name, pstc=pstc, 
+            decoded_input=decoded_output) 
     
     def get_object(self, name):
         """This is a method for parsing input to return the proper object.
