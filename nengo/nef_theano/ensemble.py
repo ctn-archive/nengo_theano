@@ -7,6 +7,7 @@ import collections
 
 from . import neuron
 from . import ensemble_origin
+from . import origin
 from . import cache
 from . import filter
 from .hPES_termination import hPESTermination
@@ -20,7 +21,7 @@ class Ensemble:
                  max_rate=(200, 300), intercept=(-1.0, 1.0), radius=1.0,
                  encoders=None, seed=None, neuron_type='lif',
                  array_size=1, eval_points=None, decoder_noise=0.1,
-                 noise_type='uniform', noise=None):
+                 noise_type='uniform', noise=None, mode='spiking'):
         """Construct an ensemble composed of the specific neuron model,
         with the specified neural parameters.
 
@@ -70,8 +71,9 @@ class Ensemble:
         self.array_size = array_size
         self.radius = radius
         self.noise = noise
-        self.decoder_noise=decoder_noise
         self.noise_type = noise_type
+        self.decoder_noise = decoder_noise
+        self.mode = mode
 
         # make sure that eval_points is the right shape
         if eval_points is not None:
@@ -79,48 +81,60 @@ class Ensemble:
             if len(eval_points.shape) == 1:
                 eval_points.shape = [1, eval_points.shape[0]]
         self.eval_points = eval_points
-
-        self.cache_key = cache.generate_ensemble_key(neurons, dimensions, 
-                     tau_rc, tau_ref, max_rate, intercept, radius, encoders, 
-                     decoder_noise, eval_points, noise, seed)
-
-        # create the neurons
-        # TODO: handle different neuron types,
-        # which may have different parameters to pass in
-        self.neurons = neuron.types[neuron_type](
-            (array_size, self.neurons_num),
-            tau_rc=tau_rc, tau_ref=tau_ref)
-
-        # compute alpha and bias
-        self.srng = RandomStreams(seed=seed)
-        max_rates = self.srng.uniform(
-            size=(self.array_size, self.neurons_num),
-            low=max_rate[0], high=max_rate[1])  
-        threshold = self.srng.uniform(
-            size=(self.array_size, self.neurons_num),
-            low=intercept[0], high=intercept[1])
-        alpha, self.bias = theano.function(
-            [], self.neurons.make_alpha_bias(max_rates, threshold))()
-
-        # force to 32 bit for consistency / speed
-        self.bias = self.bias.astype('float32')
-                
-        # compute encoders
-        self.encoders = self.make_encoders(encoders=encoders)
-        # combine encoders and gain for simplification
-        self.encoders = (self.encoders.T * alpha.T).T
-        self.shared_encoders = theano.shared(self.encoders, 
-            name='ensemble.shared_encoders')
         
-        # make default origin
+        self.cache_key = cache.generate_ensemble_key(neurons=neurons, 
+            dimensions=dimensions, tau_rc=tau_rc, tau_ref=tau_ref, 
+            max_rate=max_rate, intercept=intercept, radius=radius, 
+            encoders=encoders, decoder_noise=decoder_noise, 
+            eval_points=eval_points, noise=noise, seed=seed)
+
+        # make dictionary for origins
         self.origin = {}
-        self.add_origin('X', func=None, eval_points=self.eval_points) 
-
+        # set up a dictionary for decoded_input
         self.decoded_input = {}
-        self.encoded_input = {}
-        
-        # list of learned terminations on ensemble
-        self.learned_terminations = []
+
+        # if we're creating a spiking ensemble
+        if self.mode == 'spiking': 
+
+            # TODO: handle different neuron types,
+            self.neurons = neuron.types[neuron_type](
+                size=(array_size, self.neurons_num),
+                tau_rc=tau_rc, tau_ref=tau_ref)
+
+            # compute alpha and bias
+            self.srng = RandomStreams(seed=seed)
+            max_rates = self.srng.uniform(
+                size=(self.array_size, self.neurons_num),
+                low=max_rate[0], high=max_rate[1])  
+            threshold = self.srng.uniform(
+                size=(self.array_size, self.neurons_num),
+                low=intercept[0], high=intercept[1])
+            alpha, self.bias = theano.function(
+                [], self.neurons.make_alpha_bias(max_rates, threshold))()
+
+            # force to 32 bit for consistency / speed
+            self.bias = self.bias.astype('float32')
+                    
+            # compute encoders
+            self.encoders = self.make_encoders(encoders=encoders)
+            # combine encoders and gain for simplification
+            self.encoders = (self.encoders.T * alpha.T).T
+            self.shared_encoders = theano.shared(self.encoders, 
+                name='ensemble.shared_encoders')
+
+            # set up a dictionary for encoded_input connections
+            self.encoded_input = {}
+            # list of learned terminations on ensemble
+            self.learned_terminations = []
+
+            # make default origin
+            self.add_origin('X', func=None, eval_points=self.eval_points) 
+
+        elif self.mode == 'direct': 
+            
+            # make default origin
+            self.add_origin('X', func=None, dimensions=self.dimensions) 
+
 
     def add_termination(self, name, pstc, decoded_input=None, encoded_input=None):
         """Accounts for a new termination that takes the given input
@@ -216,7 +230,7 @@ class Ensemble:
         self.learned_terminations.append(learned_term)
         return learned_term
 
-    def add_origin(self, name, func, eval_points=None):
+    def add_origin(self, name, func, **kwargs):
         """Create a new origin to perform a given function
         on the represented signal.
 
@@ -226,10 +240,19 @@ class Ensemble:
         :param list eval_points:
             specific set of points to optimize decoders over for this origin
         """
-        if eval_points == None:
-            eval_points = self.eval_points
-        self.origin[name] = ensemble_origin.EnsembleOrigin(
-            self, func, eval_points=eval_points)
+
+        # if we're in spiking mode create an ensemble_origin with decoders 
+        # and the whole shebang for interpreting the neural activity
+        if self.mode == 'spiking':
+            if 'eval_points' not in kwargs.keys():
+                kwargs['eval_points'] = self.eval_points
+            self.origin[name] = ensemble_origin.EnsembleOrigin(
+                ensemble=self, func=func, **kwargs)
+
+        # if we're in direct mode then this population is just directly 
+        # performing the specified function, use a basic origin
+        elif self.mode == 'direct':
+            self.origin[name] = origin.Origin(func=func, **kwargs) 
 
     def make_encoders(self, encoders=None):
         """Generates a set of encoders.
@@ -273,8 +296,6 @@ class Ensemble:
         
         ### find the total input current to this population of neurons
 
-        # apply respective biases to neurons in the population 
-        J = np.array(self.bias)
         # set up matrix to store accumulated decoded input
         X = np.zeros((self.array_size, self.dimensions))
         # updates is an ordered dictionary of theano variables to update
@@ -284,44 +305,60 @@ class Ensemble:
             # add its values to the total decoded input
             X += di.value
             updates.update(di.update(dt))
-        for ei in self.encoded_input.values():
-            # add its values directly to the input current
-            J += ei.value
-            updates.update(ei.update(dt))
 
-        # only do this if there is decoded_input
-        if len(self.decoded_input) > 0:
-            # add to input current for each neuron as
-            # represented input signal x preferred direction
-            #TODO: use TT.batched_dot function here instead?
-            J = [J[i] + TT.dot(self.shared_encoders[i], X[i].T)
-                 for i in range(self.array_size)]
+        # if we're in spiking mode, then look at the input current and 
+        # calculate new neuron activities for output
+        if self.mode == 'spiking':
 
-        # if noise has been specified for this neuron,
-        if self.noise: 
-            # generate random noise values, one for each input_current element, 
-            # with standard deviation = sqrt(self.noise=std**2)
-            # When simulating white noise, the noise process must be scaled by
-            # sqrt(dt) instead of dt. Hence, we divide the std by sqrt(dt).
-            if self.noise_type.lower() == 'gaussian':
-                J += self.srng.normal(
-                    size=self.bias.shape, std=np.sqrt(self.noise/dt))
-            elif self.noise_type.lower() == 'uniform':
-                J += self.srng.uniform(
-                    size=self.bias.shape, 
-                    low=-self.noise/np.sqrt(dt), 
-                    high=self.noise/np.sqrt(dt))
+            # apply respective biases to neurons in the population 
+            J = np.array(self.bias)
 
-        # pass that total into the neuron model to produce
-        # the main theano computation
-        updates.update(self.neurons.update(J, dt))
+            for ei in self.encoded_input.values():
+                # add its values directly to the input current
+                J += ei.value
+                updates.update(ei.update(dt))
+
+            # only do this if there is decoded_input
+            if len(self.decoded_input) > 0:
+                # add to input current for each neuron as
+                # represented input signal x preferred direction
+                #TODO: use TT.batched_dot function here instead?
+                J = [J[i] + TT.dot(self.shared_encoders[i], X[i].T)
+                     for i in range(self.array_size)]
+
+            # if noise has been specified for this neuron,
+            if self.noise: 
+                # generate random noise values, one for each input_current element, 
+                # with standard deviation = sqrt(self.noise=std**2)
+                # When simulating white noise, the noise process must be scaled by
+                # sqrt(dt) instead of dt. Hence, we divide the std by sqrt(dt).
+                if self.noise_type.lower() == 'gaussian':
+                    J += self.srng.normal(
+                        size=self.bias.shape, std=np.sqrt(self.noise/dt))
+                elif self.noise_type.lower() == 'uniform':
+                    J += self.srng.uniform(
+                        size=self.bias.shape, 
+                        low=-self.noise/np.sqrt(dt), 
+                        high=self.noise/np.sqrt(dt))
+
+            # pass that total into the neuron model to produce
+            # the main theano computation
+            updates.update(self.neurons.update(J, dt))
         
-        for l in self.learned_terminations:
-            # also update the weight matrices on learned terminations
-            updates.update(l.update(dt))
+            for l in self.learned_terminations:
+                # also update the weight matrices on learned terminations
+                updates.update(l.update(dt))
 
-        # and compute the decoded origin decoded_input from the neuron output
-        for o in self.origin.values():
-            updates.update(o.update(updates[self.neurons.output]))
+            # and compute the decoded origin decoded_input from the neuron output
+            for o in self.origin.values():
+                updates.update(o.update(updates[self.neurons.output]))
+
+        elif self.mode == 'direct': 
+
+            # if we're in direct mode then just directly pass the decoded_input 
+            # to the origins for decoded_output
+            for o in self.origin.values(): 
+                updates.update(collections.OrderedDict({o.decoded_output: 
+                    TT.sum(X, axis=0).astype('float32')}))
 
         return updates

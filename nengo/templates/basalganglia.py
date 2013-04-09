@@ -19,9 +19,9 @@ def make_basal_ganglia(net, name='Basal Ganglia', dimensions=1, neurons=100,
     netbg = net.make_subnetwork(name)
 
     #TODO: make direct mode, implement with 1 neuron in direct mode
-    netbg.make('input', neurons=neurons*dimensions, dimensions=dimensions)
+    netbg.make('input', neurons=1, dimensions=dimensions, mode='direct')
     #TODO: make direct mode, implement with 1 neuron in direct mode
-    netbg.make('output', neurons=neurons*dimensions, dimensions=dimensions)
+    netbg.make('output', neurons=1, dimensions=dimensions, mode='direct')
 
     # connection weights from (Gurney, Prescott, & Redgrave, 2001)
     mm=1; mp=1; me=1; mg=1

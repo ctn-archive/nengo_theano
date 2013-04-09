@@ -1,4 +1,5 @@
 from numbers import Number
+import collections
 
 import numpy as np
 import theano
@@ -11,17 +12,26 @@ class Origin(object):
     to any accessing objects.
     """
     
-    def __init__(self, func, initial_value=None):
+    def __init__(self, func, dimensions=None, initial_value=None):
         """
+        Either func or dimensions must be specified so that an initial 
+        value can be defined.
+
         :param function func: the function carried out by this origin
+        :param int dimensions: the number of dimensions of this origin
         :param array initial_value: the initial_value of the decoded_output
-        
         """
+
         self.func = func
 
         if initial_value is None:
-            # initial output value = function value with input 0.0
-            initial_value = self.func(0.0)
+            if func is not None: 
+                # initial output value = function value with input 0.0
+                initial_value = self.func(0.0)
+            elif dimensions is not None:
+                initial_value = np.zeros(dimensions)
+            else:
+                raise Exception("Either \"func\" or \"dimensions\" must be set")
 
         # if scalar, make it a list
         if isinstance(initial_value, Number):

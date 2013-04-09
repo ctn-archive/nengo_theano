@@ -197,11 +197,13 @@ class EnsembleOrigin(Origin):
 
         """
 
-        # multiply the output by the attached ensemble's radius
-        # to put us back in the right range
+        # weighted summation over neural activity to get decoded_output
         decoded_output = TT.concatenate(
             [TT.flatten(TT.dot(spikes[i], self.decoders[i]))
              for i in range(self.ensemble.array_size)])
+        # multiply the output by the attached ensemble's radius
+        # to put us back in the right range
         decoded_output = TT.mul(
             decoded_output, self.ensemble.radius).astype('float32')
+
         return collections.OrderedDict({self.decoded_output: decoded_output})
