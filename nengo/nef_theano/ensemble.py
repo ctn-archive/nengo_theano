@@ -168,9 +168,13 @@ class Ensemble:
         else: assert False
 
         if decoded_input: 
-            # rescale decoded_input by this neuron's radius
+            if self.mode is not 'direct': 
+                # rescale decoded_input by this neuron's radius
+                source = TT.true_div(decoded_input, self.radius)
+            # ignore radius in direct mode
+            else: source = decoded_input
             self.decoded_input[name] = filter.Filter(pstc, 
-                source=TT.true_div(decoded_input, self.radius),
+                source=source, 
                 shape=(self.array_size, self.dimensions))
         elif encoded_input: 
             self.encoded_input[name] = filter.Filter(pstc, 
