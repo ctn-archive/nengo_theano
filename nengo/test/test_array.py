@@ -22,6 +22,7 @@ net.connect('in', 'A')
 net.connect('in', 'A2')
 net.connect('in', 'B')
 net.connect('in', 'B2')
+net.connect('A2', 'B')
 
 timesteps = 200
 dt_step = 0.01
