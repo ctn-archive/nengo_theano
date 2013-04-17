@@ -133,7 +133,7 @@ class Ensemble:
         elif self.mode == 'direct': 
             
             # make default origin
-            self.add_origin('X', func=None, dimensions=self.dimensions) 
+            self.add_origin('X', func=None, dimensions=self.dimensions*self.array_size) 
 
 
     def add_termination(self, name, pstc, decoded_input=None, encoded_input=None):
@@ -252,6 +252,13 @@ class Ensemble:
         # if we're in direct mode then this population is just directly 
         # performing the specified function, use a basic origin
         elif self.mode == 'direct':
+            if func is not None:
+                if 'initial_value' not in kwargs.keys():
+                    # [func(np.zeros(self.dimensions)) for i in range(self.array_size)]
+                    init = func(np.zeros(self.dimensions))
+                    init = np.array([init for i in range(self.array_size)])
+                    kwargs['initial_value'] = init.flatten()
+
             self.origin[name] = origin.Origin(func=func, **kwargs) 
 
     def make_encoders(self, encoders=None):
@@ -284,6 +291,23 @@ class Ensemble:
         encoders = encoders / TT.sqrt(norm)        
 
         return theano.function([], encoders)()
+
+    def theano_tick(self):
+
+        if self.mode == 'direct': 
+            # set up matrix to store accumulated decoded input
+            X = np.zeros((self.array_size, self.dimensions))
+            # updates is an ordered dictionary of theano variables to update
+        
+            for di in self.decoded_input.values(): 
+                # add its values to the total decoded input
+                X += di.value.get_value()
+
+            # if we're calculating a function on the decoded input
+            for o in self.origin.values(): 
+                if o.func is not None:  
+                    val = np.float32([o.func(X[i]) for i in range(len(X))])
+                    o.decoded_output.set_value(val.flatten())
 
     def update(self, dt):
         """Compute the set of theano updates needed for this ensemble.
@@ -353,12 +377,13 @@ class Ensemble:
             for o in self.origin.values():
                 updates.update(o.update(updates[self.neurons.output]))
 
-        elif self.mode == 'direct': 
+        if self.mode == 'direct': 
 
             # if we're in direct mode then just directly pass the decoded_input 
             # to the origins for decoded_output
             for o in self.origin.values(): 
-                updates.update(collections.OrderedDict({o.decoded_output: 
-                    TT.sum(X, axis=0).astype('float32')}))
-
+                if o.func is None:
+                    if len(self.decoded_input) > 0:
+                        updates.update(collections.OrderedDict({o.decoded_output: 
+                            TT.flatten(X).astype('float32')}))
         return updates

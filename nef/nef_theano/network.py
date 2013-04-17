@@ -320,7 +320,7 @@ class Network(object):
             index_pre=index_pre,
             index_post=index_post, 
             transform=transform)
-
+    
         # apply transform matrix, directing pre dimensions
         # to specific post dimensions
         decoded_output = TT.dot(transform, pre_output)
@@ -439,6 +439,8 @@ class Network(object):
         e = ensemble.Ensemble(*args, **kwargs) 
 
         # store created ensemble in node dictionary
+        if kwargs.get('mode', None) == 'direct':
+            self.tick_nodes.append(e)
         self.nodes[name] = e
         return e
 
@@ -536,7 +538,6 @@ class Network(object):
         # if theano graph hasn't been calculated yet, retrieve it
         if self.theano_tick is None:
             self.theano_tick = self.make_theano_tick(dt) 
-
         for i in range(int(time / self.dt)):
             # get current time step
             t = self.run_time + i * self.dt
@@ -595,7 +596,6 @@ class Network(object):
             # spikes become spike trains
             elif probe.target_name.endswith('spikes'):
                 # have to change spike train of 0s and 1s to list of times
-                print 'here'
                 for neuron in probe.get_data().T:
                     segment.spiketrains.append(
                         neo.SpikeTrain(
