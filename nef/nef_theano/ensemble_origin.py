@@ -69,6 +69,10 @@ class EnsembleOrigin(Origin):
             if eval_points is not self.ensemble.eval_points:
                 key += '_eval%08x' % hash(tuple([tuple(x) for x in eval_points]))
 
+            if eval_points.shape[0] != self.ensemble.dimensions: 
+                raise Exception("Evaluation points must be of the form: " + 
+                    "[dimensions x num_samples]")
+
 
         # compute the target_values at the sampled points 
         if func is None:
