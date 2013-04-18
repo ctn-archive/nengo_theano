@@ -38,13 +38,10 @@ class LIFNeuron(Neuron):
         :param float array intercepts: x-intercepts of neurons
         
         """
-        x1 = intercepts
-        x2 = 1.0
-        z1 = 1
-        z2 = 1.0 / (1 - TT.exp(
+        x = 1.0 / (1 - TT.exp(
                 (self.tau_ref - (1.0 / max_rates)) / self.tau_rc))
-        alpha = (z1 - z2) / (x1 - x2)
-        j_bias = z1 - alpha * x1
+        alpha = (1 - x) / (intercepts - 1.0)
+        j_bias = 1 - alpha * intercepts
         return alpha, j_bias
 
     # TODO: have a reset() function at the ensemble and network level
