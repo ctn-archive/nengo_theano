@@ -24,7 +24,7 @@ from .. import nef_theano as nef
 
 # create the list of evaluation points
 eval_points1 = np.arange(-1, 0, .5)
-eval_points2 = np.array([[1,1],[-1,1],[-1,-1],[1,-1]])
+eval_points2 = np.array([[1,1],[-1,1],[-1,-1],[1,-1]]).T
 
 net = nef.Network('EvalPoints Test')
 net.make_input('in', value=math.sin)
