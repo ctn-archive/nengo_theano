@@ -82,6 +82,10 @@ class Ensemble:
                 eval_points.shape = [1, eval_points.shape[0]]
         self.eval_points = eval_points
         
+        # make sure intercept is the right shape
+        if isinstance(intercept, (int,float)): intercept = [intercept, 1]
+        elif len(intercept) == 1: intercept.append(1) 
+
         self.cache_key = cache.generate_ensemble_key(neurons=neurons, 
             dimensions=dimensions, tau_rc=tau_rc, tau_ref=tau_ref, 
             max_rate=max_rate, intercept=intercept, radius=radius, 
@@ -103,6 +107,7 @@ class Ensemble:
 
             # compute alpha and bias
             self.srng = RandomStreams(seed=seed)
+            self.max_rate = max_rate
             max_rates = self.srng.uniform(
                 size=(self.array_size, self.neurons_num),
                 low=max_rate[0], high=max_rate[1])  
