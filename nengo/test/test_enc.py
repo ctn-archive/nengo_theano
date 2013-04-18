@@ -10,13 +10,15 @@ from .. import nef_theano as nef
 
 build_time_start = time.time()
 
-net = nef.Network('Encoder Test')
+timesteps = 1000
+dt_step = 0.001
+net = nef.Network('Encoder Test', dt=dt_step)
 net.make_input('in1', math.sin)
 net.make_input('in2', math.cos)
 net.make('A', 100, 1)
 net.make('B', 100, 1, encoders=[[1]], intercept=(0, 1.0))
-net.make('C', 100, 2)
-net.make('D', 100, 2, encoders=[[1,1],[1,-1],[-1,-1],[-1,1]])
+net.make('C', 100, 2, radius=1.5)
+net.make('D', 100, 2, encoders=[[1,1],[1,-1],[-1,-1],[-1,1]], radius=1.5)
 net.make('outputC', 1, 1, mode='direct')
 net.make('outputD', 1, 1, mode='direct')
 
@@ -31,8 +33,6 @@ def prod(x): return x[0] * x[1]
 net.connect('C', 'outputC', func=prod)
 net.connect('D', 'outputD', func=prod)
 
-timesteps = 1000
-dt_step = 0.01
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01
 I1p = net.make_probe('in1', dt_sample=dt_step, pstc=pstc)

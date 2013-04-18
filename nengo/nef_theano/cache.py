@@ -6,7 +6,7 @@ import tempfile
 
 def generate_ensemble_key(neurons, dimensions, tau_rc, tau_ref, max_rate,
                           intercept, radius, encoders, decoder_noise,
-                          eval_points, noise, seed):
+                          eval_points, noise, seed, dt):
 
     key = '%d_%d_%g_%g' % (neurons, dimensions, tau_rc, tau_ref)
 
@@ -20,7 +20,7 @@ def generate_ensemble_key(neurons, dimensions, tau_rc, tau_ref, max_rate,
     else:
         key += '_%08x' % hash(tuple(intercept))
 
-    key += '_%g_%g' % (radius, decoder_noise)
+    key += '_%g_%g_%g' % (radius, decoder_noise, dt)
 
     # TODO: use some approach other than hoping that this hash
     # does not have collisions

@@ -46,7 +46,7 @@ class Probe(object):
     def theano_tick(self):
         """
         """
-        i_samp = int(np.floor(self.t / self.dt_sample))
+        i_samp = int(self.t / self.dt_sample)
         if i_samp > self.i:
             # we're as close to a sample point as we're going to get,
             # so take a sample
@@ -57,7 +57,7 @@ class Probe(object):
                                          + self.data.shape[1:])])
 
             # record the filtered value
-            self.data[i_samp] = self.filter.value.get_value()
+            self.data[self.i+1:i_samp+1] = self.filter.value.get_value()
             self.i = i_samp
 
     def get_data(self):
