@@ -17,7 +17,7 @@ class Ensemble:
     
     """
     
-    def __init__(self, neurons, dimensions, tau_ref=0.002, tau_rc=0.02,
+    def __init__(self, neurons, dimensions, dt, tau_ref=0.002, tau_rc=0.02,
                  max_rate=(200, 300), intercept=(-1.0, 1.0), radius=1.0,
                  encoders=None, seed=None, neuron_type='lif',
                  array_size=1, eval_points=None, decoder_noise=0.1,
@@ -90,7 +90,7 @@ class Ensemble:
             dimensions=dimensions, tau_rc=tau_rc, tau_ref=tau_ref, 
             max_rate=max_rate, intercept=intercept, radius=radius, 
             encoders=encoders, decoder_noise=decoder_noise, 
-            eval_points=eval_points, noise=noise, seed=seed)
+            eval_points=eval_points, noise=noise, seed=seed, dt=dt)
 
         # make dictionary for origins
         self.origin = {}
@@ -133,7 +133,7 @@ class Ensemble:
             self.learned_terminations = []
 
             # make default origin
-            self.add_origin('X', func=None, eval_points=self.eval_points) 
+            self.add_origin('X', func=None, dt=dt, eval_points=self.eval_points) 
 
         elif self.mode == 'direct': 
             
@@ -384,7 +384,7 @@ class Ensemble:
 
             # and compute the decoded origin decoded_input from the neuron output
             for o in self.origin.values():
-                updates.update(o.update(updates[self.neurons.output]))
+                updates.update(o.update(dt, updates[self.neurons.output]))
 
         if self.mode == 'direct': 
 

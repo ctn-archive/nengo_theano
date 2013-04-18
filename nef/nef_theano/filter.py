@@ -45,7 +45,7 @@ class Filter:
         """
         :param float dt: the timestep of the update
         """
-        if self.pstc > 0:
+        if self.pstc >= dt:
             decay = TT.cast(np.exp(-dt / self.pstc), self.value.dtype)
             value_new = decay * self.value + (1 - decay) * self.source
             return collections.OrderedDict([(self.value, value_new.astype('float32'))])

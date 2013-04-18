@@ -381,7 +381,7 @@ class Network(object):
                 if origin_name not in obj.origin:
                     # if an origin for this function hasn't already been created
                     # create origin with to perform desired func
-                    obj.add_origin(origin_name, func)
+                    obj.add_origin(origin_name, func, dt=self.dt)
 
             obj = obj.origin[origin_name]
 
@@ -436,6 +436,7 @@ class Network(object):
         # the theano function
         self.theano_tick = None
 
+        kwargs['dt'] = self.dt
         e = ensemble.Ensemble(*args, **kwargs) 
 
         # store created ensemble in node dictionary
@@ -504,10 +505,9 @@ class Network(object):
         self.add(p)
         return p
             
-    def make_theano_tick(self, dt):
+    def make_theano_tick(self):
         """Generate the theano function for running the network simulation.
         
-        :param float dt: the timestep of the update
         :returns: theano function
         """
 
@@ -520,12 +520,12 @@ class Network(object):
             # if there is some variable to update
             if hasattr(node, 'update'):
                 # add it to the list of variables to update every time step
-                updates.update(node.update(dt))
+                updates.update(node.update(self.dt))
 
         # create graph and return optimized update function
         return theano.function([], [], updates=updates)
 
-    def run(self, time, dt=.001):
+    def run(self, time):
         """Run the simulation.
 
         If called twice, the simulation will continue for *time*
@@ -537,7 +537,7 @@ class Network(object):
         """         
         # if theano graph hasn't been calculated yet, retrieve it
         if self.theano_tick is None:
-            self.theano_tick = self.make_theano_tick(dt) 
+            self.theano_tick = self.make_theano_tick() 
         for i in range(int(time / self.dt)):
             # get current time step
             t = self.run_time + i * self.dt

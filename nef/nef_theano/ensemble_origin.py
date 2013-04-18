@@ -11,7 +11,7 @@ from . import cache
 from .origin import Origin
 
 class EnsembleOrigin(Origin):
-    def __init__(self, ensemble, func=None, eval_points=None):
+    def __init__(self, ensemble, dt, func=None, eval_points=None):
         """The output from a population of neurons (ensemble),
         performing a transformation (func) on the represented value.
 
@@ -23,13 +23,14 @@ class EnsembleOrigin(Origin):
         
         """
         self.ensemble = ensemble
-        func_size = self.compute_decoders(func, eval_points) # sets up self.decoders
+        # sets up self.decoders
+        func_size = self.compute_decoders(func, dt, eval_points) 
         # decoders is array_size * neurons_num * func_dimensions, 
         # initial value should have array_size values * func_dimensions
         initial_value = np.zeros(self.ensemble.array_size * func_size) 
         Origin.__init__(self, func=func, initial_value=initial_value)
     
-    def compute_decoders(self, func, eval_points=None):     
+    def compute_decoders(self, func, dt, eval_points=None):     
         """Compute decoding weights.
 
         Calculate the scaling values to apply to the output
@@ -43,10 +44,10 @@ class EnsembleOrigin(Origin):
         of desired f(x) values across sampled points.
 
         :param function func: function to compute with this origin
+        :param float dt: timestep for simulating to get A matrix
         :param list eval_points:
             specific set of points to optimize decoders over 
         """
-        dt = .001 # timestep for simulation
 
         key = self.ensemble.cache_key
         if eval_points == None:  
@@ -167,7 +168,7 @@ class EnsembleOrigin(Origin):
             U = np.dot(A, target_values.T)
             
             # compute decoders - least squares method 
-            decoders[index] = np.dot(Ginv, U) / dt
+            decoders[index] = np.dot(Ginv, U)
 
         self.decoders = theano.shared(decoders.astype('float32'), 
             name='ensemble_origin.decoders')
@@ -195,7 +196,7 @@ class EnsembleOrigin(Origin):
         
         return theano.function([], samples)()
 
-    def update(self, spikes):
+    def update(self, dt, spikes):
         """the theano computation for converting neuron output
         into a decoded value.
         
@@ -209,7 +210,7 @@ class EnsembleOrigin(Origin):
 
         # weighted summation over neural activity to get decoded_output
         decoded_output = TT.concatenate(
-            [TT.flatten(TT.dot(spikes[i], self.decoders[i]))
+            [TT.flatten(TT.dot(spikes[i], self.decoders[i] / dt))
              for i in range(self.ensemble.array_size)])
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range

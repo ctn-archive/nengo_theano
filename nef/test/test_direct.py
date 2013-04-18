@@ -26,7 +26,8 @@ def prod(x): return x[0] * x[1]
 net.connect('E', 'D', func=prod)
 
 timesteps = 1000
-dt_step = 0.01
+dt_step = 0.0001
+
 t = np.linspace(dt_step, timesteps*dt_step, timesteps)
 pstc = 0.01
 Ip = net.make_probe('in', dt_sample=dt_step, pstc=pstc)
