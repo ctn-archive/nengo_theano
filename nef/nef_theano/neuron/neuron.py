@@ -3,7 +3,7 @@ from theano import tensor as TT
 import numpy as np
 
 
-def accumulate(input, neuron, dt, time=1.0, init_time=0.05):
+def accumulate(J, neurons, dt, time=1.0, init_time=0.05):
     """Accumulates neuron output over time.
 
     Take a neuron model, run it for the given amount of time with
@@ -12,7 +12,7 @@ def accumulate(input, neuron, dt, time=1.0, init_time=0.05):
     
     Returns the accumulated output over that time.
 
-    :param input: theano function object describing the input
+    :param J: theano function object for the input current
     :param Neuron neuron: population of neurons from which to accumulate data
     :param float time: length of time to simulate population for (s)
     :param float init_time: run neurons for this long before collecting data
@@ -20,20 +20,20 @@ def accumulate(input, neuron, dt, time=1.0, init_time=0.05):
 
     """
     # create internal state variable to keep track of number of spikes
-    total = theano.shared(np.zeros(neuron.size).astype('float32'), 
+    total = theano.shared(np.zeros(neurons.size).astype('float32'), 
                           name='neuron.total')
     
     ### make the standard neuron update function
 
     # updates is dictionary of variables returned by neuron.update
-    updates = neuron.update(input.astype('float32'), dt)
+    updates = neurons.update(J.astype('float32'), dt)
 
     # update all internal state variables listed in updates
     tick = theano.function([], [], updates=updates)
     
     ### make a variant that also includes computing the total output
     # add another internal variable to change to updates dictionary
-    updates[total] = total + neuron.output
+    updates[total] = total + neurons.output
 
     # create theano function that does it all
     accumulate_spikes = theano.function([], [], updates=updates)
