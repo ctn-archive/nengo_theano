@@ -37,9 +37,10 @@ class Input(object):
         elif isinstance(value, dict):
             self.change_time = sorted(value.keys())[0]
             # check for size of dict elements
-            if isinstance(value[self.change_time], list):
+            if isinstance(value[self.change_time], (list, np.ndarray)):
                 initial_value = np.zeros(len(value[self.change_time]))
-            else: initial_value = np.zeros(1)
+            else:
+                initial_value = np.zeros(1)
             self.origin['X'] = origin.Origin(func=None, 
                 initial_value=initial_value)
             self.values = value
@@ -68,7 +69,7 @@ class Input(object):
         # change value
         if self.change_time is not None and self.t > self.change_time:
             self.origin['X'].decoded_output.set_value(
-                np.float32(np.array([self.values[self.change_time]])))
+                np.asarray(self.values[self.change_time]).astype('float32').flatten())
             index = sorted(self.values.keys()).index(self.change_time) 
             if index < len(self.values) - 1:
                 self.change_time = sorted(self.values.keys())[index+1]
