@@ -124,7 +124,8 @@ class EnsembleOrigin(Origin):
                 # accumulating spikes to get a spike rate
                 #TODO: is this long enough? Should it be less?
                 # If we do less, we may get a good noise approximation!
-                A = neuron.accumulate(J=J, neurons=neurons, dt=dt, time=1.0)
+                A = neuron.accumulate(J=J, neurons=neurons, dt=dt, 
+                    time=dt*200, init_time=dt*20)
                 # add noise to elements of A
                 # std_dev = max firing rate of population * .1
                 noise = .1 # from Nengo
