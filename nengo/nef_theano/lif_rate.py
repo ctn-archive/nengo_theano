@@ -3,11 +3,10 @@ import collections
 import theano
 from theano import tensor as TT
 
-from .neuron import Neuron
+import neuron
 
-# an example of implementing a rate-mode neuron
 
-class LIFRateNeuron(Neuron):
+class LIFRateNeuron(neuron.Neuron):
     def __init__(self, size, tau_rc=0.02, tau_ref=0.002):
         """Constructor for a set of LIF rate neuron
 
@@ -16,7 +15,7 @@ class LIFRateNeuron(Neuron):
         :param float tau_ref: refractory period length (s)
 
         """
-        Neuron.__init__(self, size)
+        neuron.Neuron.__init__(self, size)
         self.tau_rc = tau_rc
         self.tau_ref = tau_ref
 
@@ -57,3 +56,6 @@ class LIFRateNeuron(Neuron):
         return collections.OrderedDict({
                 self.output: TT.unbroadcast(rate.astype('float32'), 0)
                 })
+
+neuron.types['lif-rate'] = LIFRateNeuron
+

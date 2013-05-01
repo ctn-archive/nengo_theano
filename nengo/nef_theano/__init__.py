@@ -16,4 +16,8 @@ from .learned_termination import LearnedTermination
 advanced = [Ensemble, Input, SimpleNode, Probe, Origin,
             EnsembleOrigin, LearnedTermination]
 
+import neuron
+import lif_rate
+import lif
+
 __all__ = basic + advanced

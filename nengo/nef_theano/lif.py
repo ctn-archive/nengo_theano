@@ -4,9 +4,9 @@ import numpy as np
 import theano
 from theano import tensor as TT
 
-from .neuron import Neuron
+import neuron
 
-class LIFNeuron(Neuron):
+class LIFNeuron(neuron.Neuron):
     def __init__(self, size, tau_rc=0.02, tau_ref=0.002):
         """Constructor for a set of LIF rate neuron.
 
@@ -16,7 +16,7 @@ class LIFNeuron(Neuron):
         :param float tau_ref: refractory period length (s)
 
         """
-        Neuron.__init__(self, size)
+        neuron.Neuron.__init__(self, size)
         self.tau_rc = tau_rc
         self.tau_ref  = tau_ref
         self.voltage = theano.shared(
@@ -48,7 +48,7 @@ class LIFNeuron(Neuron):
     #that would actually call this
     def reset(self):
         """Resets the state of the neuron."""
-        Neuron.reset(self)
+        neuron.Neuron.reset(self)
 
         self.voltage.set_value(np.zeros(self.size).astype('float32'))
         self.refractory_time.set_value(np.zeros(self.size).astype('float32'))
@@ -100,3 +100,5 @@ class LIFNeuron(Neuron):
                 self.refractory_time: new_refractory_time.astype('float32'),
                 self.output: spiked.astype('float32'),
                 })
+
+neuron.types['lif'] = LIFNeuron

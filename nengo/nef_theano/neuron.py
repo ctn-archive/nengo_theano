@@ -2,6 +2,11 @@ import theano
 from theano import tensor as TT
 import numpy as np
 
+# types registry (plugin pattern)
+# The types registry maps strings like 'lif' and 'lif-rate'
+# to sub-classes in lif.py and lif_rate.py
+types = {}
+
 
 def accumulate(J, neurons, dt, time=1.0, init_time=0.05):
     """Accumulates neuron output over time.
@@ -79,3 +84,4 @@ class Neuron(object):
 
         """
         raise NotImplementedError()
+
