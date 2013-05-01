@@ -53,7 +53,14 @@ def compute_transform(dim_pre, dim_post, array_size, weight=1,
 
     # reformulate to account for post.array_size
     if transform.shape == (dim_post * array_size, dim_pre):
+        array_transform = [[[0] * dim_pre for i in range(dim_post)]
+                           for j in range(array_size)]
 
+        for i in range(array_size):
+            for j in range(dim_post):
+                array_transform[i][j] = transform[i * dim_post + j]
+
+        transform = array_transform
 
     return transform
 
