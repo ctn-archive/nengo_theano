@@ -79,8 +79,9 @@ class Case1(theano.Op):
         return type(self) == type(other) and self.shape4 == other.shape4
 
     def make_node(self, transform, pre_output):
+        # TODO: more accurate broadcasting output pattern
         return theano.Apply(self,
-                [transform, pre_output],
+                map(theano.tensor.as_tensor_variable, [transform, pre_output]),
                 [theano.tensor.matrix()])
 
     def perform(self, node, inputs, outstor):
@@ -114,8 +115,9 @@ class Case2(theano.Op):
         return type(self) == type(other) and self.shape4 == other.shape4
 
     def make_node(self, transform, pre_output):
+        # TODO: more accurate broadcasting output pattern
         return theano.Apply(self,
-                [transform, pre_output],
+                map(theano.tensor.as_tensor_variable, [transform, pre_output]),
                 [theano.tensor.matrix()])
 
     def perform(self, node, inputs, outstor):
