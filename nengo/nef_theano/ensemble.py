@@ -139,7 +139,8 @@ class Ensemble:
             
             # make default origin
             self.add_origin('X', func=None, dimensions=self.dimensions*self.array_size) 
-
+            # reset neurons_num to 0
+            self.neurons_num = 0
 
     def add_termination(self, name, pstc, decoded_input=None, encoded_input=None):
         """Accounts for a new termination that takes the given input
