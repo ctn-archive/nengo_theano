@@ -73,7 +73,7 @@ class Case1(theano.Op):
         self.shape4 = shape4
 
     def __hash__(self):
-        return hash(type(self), self.shape4)
+        return hash((type(self), self.shape4))
 
     def __eq__(self, other):
         return type(self) == type(other) and self.shape4 == other.shape4
@@ -109,7 +109,7 @@ class Case2(theano.Op):
         self.shape4 = shape4
 
     def __hash__(self):
-        return hash(type(self), self.shape4)
+        return hash((type(self), self.shape4))
 
     def __eq__(self, other):
         return type(self) == type(other) and self.shape4 == other.shape4
