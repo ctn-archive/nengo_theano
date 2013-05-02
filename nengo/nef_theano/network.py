@@ -204,7 +204,7 @@ class Network(object):
                     pre_output = pre.neurons.output 
 
                     case1 = connection.Case1(
-                        (post_array_size, post.neurons_num,
+                        (post.array_size, post.neurons_num,
                          pre.array_size, pre.neurons_num))
                     encoded_output = case1(transform, pre_output)
 
@@ -223,7 +223,7 @@ class Network(object):
                     assert func == None 
 
                     case2 = connection.Case2(
-                        (post_array_size, post.neurons_num,
+                        (post.array_size, post.neurons_num,
                          pre.array_size, pre.neurons_num))
                     encoded_output = case2(transform, pre_output)
     

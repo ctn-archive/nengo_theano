@@ -268,6 +268,7 @@ class Ensemble:
                     init = np.array([init for i in range(self.array_size)])
                     kwargs['initial_value'] = init.flatten()
 
+            if kwargs.has_key('dt'): del kwargs['dt']
             self.origin[name] = origin.Origin(func=func, **kwargs) 
 
     def make_encoders(self, encoders=None):
