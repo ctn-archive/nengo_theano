@@ -81,7 +81,7 @@ class Case1(theano.Op):
     def make_node(self, transform, pre_output):
         return theano.Apply(self,
                 [transform, pre_output],
-                [tensor.matrix()])
+                [theano.tensor.matrix()])
 
     def perform(self, node, inputs, outstor):
         transform, pre_output = inputs
@@ -116,7 +116,7 @@ class Case2(theano.Op):
     def make_node(self, transform, pre_output):
         return theano.Apply(self,
                 [transform, pre_output],
-                [tensor.matrix()])
+                [theano.tensor.matrix()])
 
     def perform(self, node, inputs, outstor):
         transform, pre_output = inputs
