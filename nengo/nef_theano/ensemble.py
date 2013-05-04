@@ -3,7 +3,7 @@ import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as TT
 import numpy as np
-import collections
+from _collections import OrderedDict
 
 from . import neuron
 from . import ensemble_origin
@@ -332,9 +332,10 @@ class Ensemble:
         ### find the total input current to this population of neurons
 
         # set up matrix to store accumulated decoded input
-        X = np.zeros((self.array_size, self.dimensions))
+        X = TT.as_tensor_variable(
+                np.zeros((self.array_size, self.dimensions)).astype('float32'))
         # updates is an ordered dictionary of theano variables to update
-        updates = collections.OrderedDict()
+        updates = OrderedDict()
     
         for di in self.decoded_input.values(): 
             # add its values to the total decoded input
@@ -395,6 +396,6 @@ class Ensemble:
             for o in self.origin.values(): 
                 if o.func is None:
                     if len(self.decoded_input) > 0:
-                        updates.update(collections.OrderedDict({o.decoded_output: 
+                        updates.update(OrderedDict({o.decoded_output: 
                             TT.flatten(X).astype('float32')}))
         return updates

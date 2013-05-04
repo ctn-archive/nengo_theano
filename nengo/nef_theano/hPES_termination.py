@@ -1,4 +1,4 @@
-import collections
+from _collections import OrderedDict
 
 import numpy as np
 import theano
@@ -119,7 +119,7 @@ class hPESTermination(LearnedTermination):
         alpha = TT.cast(dt / self.theta_tau, dtype='float32')
         new_theta = self.theta + alpha * (new_post - self.theta)
 
-        return collections.OrderedDict({
+        return OrderedDict({
                 self.weight_matrix: self.learn(),
                 self.pre_filtered: new_pre, 
                 self.post_filtered: new_post,
