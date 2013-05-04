@@ -4,6 +4,8 @@ import math
 import time
 
 from nengo import nef_theano as nef
+from nengo.nef_theano.simulator import Simulator
+from nengo.nef_theano.simulator_ocl import SimulatorOCL
 
 net=nef.Network('Runtime Test', seed=123)
 net.make_input('in', value=math.sin)
@@ -25,7 +27,22 @@ net.connect('A', 'C', func=pow)
 net.connect('A', 'D', func=mult)
 net.connect('D', 'B', func=pow) # throw in some recurrency whynot
 
-start_time = time.time()
-print "starting simulation"
-net.run(0.5)
-print "runtime: ", time.time() - start_time, "seconds"
+if 0:
+    start_time = time.time()
+    print "starting simulation"
+    net.run(0.5)
+    print "runtime: ", time.time() - start_time, "seconds"
+
+if 0:
+    sim = Simulator(net)
+    start_time = time.time()
+    print "starting simulation"
+    sim.run(0.5)
+    print "runtime: ", time.time() - start_time, "seconds"
+
+if 1:
+    sim2 = SimulatorOCL(net)
+    start_time = time.time()
+    print "starting simulation"
+    sim2.run(0.5)
+    print "runtime: ", time.time() - start_time, "seconds"

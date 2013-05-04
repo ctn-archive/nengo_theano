@@ -9,6 +9,7 @@ import numpy as np
 from . import neuron
 from . import cache
 from .origin import Origin
+from simulator import map_gemv
 
 class EnsembleOrigin(Origin):
     def __init__(self, ensemble, dt, func=None, eval_points=None):
@@ -29,6 +30,7 @@ class EnsembleOrigin(Origin):
         # initial value should have array_size values * func_dimensions
         initial_value = np.zeros(self.ensemble.array_size * func_size) 
         Origin.__init__(self, func=func, initial_value=initial_value)
+        self.func_size = func_size
     
     def compute_decoders(self, func, dt, eval_points=None):     
         """Compute decoding weights.
@@ -209,13 +211,12 @@ class EnsembleOrigin(Origin):
 
         """
 
-        # weighted summation over neural activity to get decoded_output
-        decoded_output = TT.concatenate(
-            [TT.flatten(TT.dot(spikes[i], self.decoders[i] / dt))
-             for i in range(self.ensemble.array_size)])
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range
-        decoded_output = TT.mul(
-            decoded_output, self.ensemble.radius).astype('float32')
+        r = self.ensemble.radius
+        # weighted summation over neural activity to get decoded_output
+        z = TT.zeros((self.ensemble.array_size, self.func_size), dtype='float32')
+        decoded_output = TT.flatten(
+            map_gemv(r / dt, self.decoders.dimshuffle(0,2,1), spikes, 1.0, z))
 
         return OrderedDict({self.decoded_output: decoded_output})
