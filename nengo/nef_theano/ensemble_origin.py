@@ -1,4 +1,4 @@
-import collections
+from _collections import OrderedDict
 
 import theano
 from theano import tensor as TT
@@ -218,4 +218,4 @@ class EnsembleOrigin(Origin):
         decoded_output = TT.mul(
             decoded_output, self.ensemble.radius).astype('float32')
 
-        return collections.OrderedDict({self.decoded_output: decoded_output})
+        return OrderedDict({self.decoded_output: decoded_output})

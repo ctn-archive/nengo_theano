@@ -1,5 +1,5 @@
 import random
-import collections
+from _collections import OrderedDict
 import quantities
 
 import theano
@@ -439,7 +439,7 @@ class Network(object):
 
         # dictionary for all variables
         # and the theano description of how to compute them 
-        updates = collections.OrderedDict()
+        updates = OrderedDict()
 
         # for every node in the network
         for node in self.nodes.values():
@@ -449,7 +449,7 @@ class Network(object):
                 updates.update(node.update(self.dt))
 
         # create graph and return optimized update function
-        return theano.function([], [], updates=updates)
+        return theano.function([], [], updates=updates.items())
 
     def run(self, time):
         """Run the simulation.

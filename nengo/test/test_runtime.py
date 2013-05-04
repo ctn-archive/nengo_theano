@@ -3,9 +3,9 @@
 import math
 import time
 
-from .. import nef_theano as nef
+from nengo import nef_theano as nef
 
-net=nef.Network('Runtime Test')
+net=nef.Network('Runtime Test', seed=123)
 net.make_input('in', value=math.sin)
 net.make('A', 1000, 1)
 net.make('B', 1000, 1)
@@ -25,9 +25,7 @@ net.connect('A', 'C', func=pow)
 net.connect('A', 'D', func=mult)
 net.connect('D', 'B', func=pow) # throw in some recurrency whynot
 
-timesteps = 5000 # running for timesteps * .1 seconds
 start_time = time.time()
 print "starting simulation"
-for i in range(timesteps):
-    net.run(0.1)
+net.run(0.5)
 print "runtime: ", time.time() - start_time, "seconds"
