@@ -15,14 +15,13 @@ except ImportError:
 description = ("Tools for making neural simulations using the methods "
                + "of the Neural Engineering Framework")
 setup(
-    name="nef",
+    name="nengo",
     version="0.1.0",
     author="CNRGlab at UWaterloo",
     author_email="celiasmith@uwaterloo.ca",
-    packages=['nef', 'nef.test', 'nef.nef_theano', 'nef.nef_theano.neuron',
-              'nef.nef_minimal'],
+    packages=['nengo', 'nengo.test', 'nengo.nef_theano', 'nengo.nef_minimal'],
     scripts=[],
-    url="https://github.com/ctn-waterloo/nef-py",
+    url="https://github.com/ctn-waterloo/nengo_theano",
     license="LICENSE.rst",
     description=description,
     long_description=open('README.rst').read(),
