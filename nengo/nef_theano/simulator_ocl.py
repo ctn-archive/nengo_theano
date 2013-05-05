@@ -28,6 +28,10 @@ class Array(object):
     def ndim(self):
         return len(self.shape)
 
+    @property
+    def size(self):
+        return int(np.prod(self.shape))
+
     def empty_like(self):
         buf = cl.Buffer(self.data.context,
             flags=cl.mem_flags.READ_WRITE,
@@ -36,6 +40,14 @@ class Array(object):
                 dtype=self.dtype,
                 shape=list(self.shape),
                 strides=list(self.strides))
+
+    def __str__(self):
+        return '%s{%s, %s, strides=%s}' % (
+                'Array', self.dtype, self.shape, self.strides)
+    def __repr__(self):
+        return '%s{%s, %s, strides=%s}' % (
+                'Array', self.dtype, self.shape, self.strides)
+
 
 
 def to_device(queue, arr, flags=cl.mem_flags.READ_WRITE):
@@ -496,12 +508,12 @@ def make_vector_p(queue, sim, node):
 
 @alloc(theano.tensor.basic.Reshape)
 def reshape_a(queue, sim, node):
-    X, shape = node.inputs
+    X = node.inputs[0]
     Xval = sim.ocl_vars[X]
-    shape_val = sim.constant_vars[shape]
+    shape_val = [sim.constant_vars[vv] for vv in node.inputs[1:]]
 
     if np.prod(Xval.shape) == np.prod(shape_val) == 1:
-        Yval = Array(Xval.data, Xval.dtype,
+        Yval = Array(Xval.data, dtype=Xval.dtype,
                 shape=shape_val,
                 strides=[0] * len(shape_val))
     else:
@@ -530,28 +542,28 @@ def flatten_p(queue, sim, node):
     return []
 
 @alloc(theano.tensor.basic.Dot)
-def flatten_a(queue, sim, node):
+def dot_a(queue, sim, node):
     X, Y,= node.inputs
+
     if X in sim.ocl_vars:
         Xval = sim.ocl_vars[X]
     else:
         Xval = sim.constant_vars[X]
-        print Xval
-    Yval = sim.ocl_vars[Y]
+        if np.all(Xval == 1):
+            # XXX figure out what shape X was meant to have
+            Yval = sim.ocl_vars[Y]
+            if Yval.size == 1:
+                sim.ocl_vars[node.outputs[0]] = Yval
+                return
 
-    print Xval.ndim
-    print Yval.ndim
-
-    A, B = Xval.shape
-    C, D = Yval.shape
+    raise NotImplementedError()
 
     Zval = empty(Xval.data.context, node.outputs[0].dtype,
             shape=(Xval.shape[0], Yval.shape[1]),
             strides=[0])
-    sim.ocl_vars[node.outputs[0]] = Yval
 
 @perform(theano.tensor.basic.Dot)
-def flatten_p(queue, sim, node):
+def dot_p(queue, sim, node):
     return []
 
 
@@ -643,4 +655,26 @@ def lif_p(queue, sim, node):
     return [Plan(locals())]
 
 
+@alloc(theano.tensor.elemwise.Elemwise)
+def elemwise_a(queue, sim, node):
+    ocl_inputs = [sim.ocl_vars.get(vv) for vv in node.inputs]
+    const_inputs = [sim.constant_vars.get(vv) for vv in node.inputs]
+    for vv in node.outputs:
+        shape = np.asarray([1] * vv.ndim)
+        for vi in ocl_inputs:
+            if vi is not None:
+                assert len(shape) == len(vi.shape)
+                shape = np.maximum(shape, vi.shape)
+        for vi in const_inputs:
+            if vi is not None and hasattr(vi, 'shape'):
+                assert len(shape) == len(vi.shape)
+                shape = np.maximum(shape, vi.shape)
+
+        sim.ocl_vars[vv] = empty(queue.context,
+                list(shape), vv.dtype)
+
+@perform(theano.tensor.elemwise.Elemwise)
+def elemwise_p(queue, sim, node):
+    # XXX
+    return []
 
