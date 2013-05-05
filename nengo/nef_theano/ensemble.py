@@ -179,10 +179,13 @@ class Ensemble:
                 source = TT.true_div(decoded_input, self.radius)
             # ignore radius in direct mode
             else: source = decoded_input
+            name = self.get_unique_name(name, self.decoded_input)
+            print name
             self.decoded_input[name] = filter.Filter(pstc, 
                 source=source, 
                 shape=(self.array_size, self.dimensions))
         elif encoded_input: 
+            name = self.get_unique_name(name, self.encoded_input)
             self.encoded_input[name] = filter.Filter(pstc, 
                 source=encoded_input, 
                 shape=(self.array_size, self.neurons_num))
@@ -272,6 +275,21 @@ class Ensemble:
             if kwargs.has_key('dt'): del kwargs['dt']
             self.origin[name] = origin.Origin(func=func, **kwargs) 
 
+    def get_unique_name(self, name, dic):
+        """A helper function that runs through a dictionary
+        and checks for the key name, adds a digit to the end
+        until a unique key has been created.
+
+        :param string name: desired key name
+        :param dict dic: the dictionary to search through
+        :returns string: a unique key name for dic
+        """
+        i = 0
+        while dic.has_key(name + '_' + str(i)): 
+            i += 1
+
+        return name + '_' + str(i)
+
     def make_encoders(self, encoders=None):
         """Generates a set of encoders.
 
@@ -346,7 +364,7 @@ class Ensemble:
         if self.mode == 'spiking':
 
             # apply respective biases to neurons in the population 
-            J = np.array(self.bias)
+            J = TT.as_tensor_variable(np.array(self.bias))
 
             for ei in self.encoded_input.values():
                 # add its values directly to the input current
@@ -358,8 +376,9 @@ class Ensemble:
                 # add to input current for each neuron as
                 # represented input signal x preferred direction
                 #TODO: use TT.batched_dot function here instead?
-                J = [J[i] + TT.dot(self.shared_encoders[i], X[i].T)
-                     for i in range(self.array_size)]
+                for i in range(self.array_size):
+                    J = TT.inc_subtensor(J[i],
+                       TT.dot(self.shared_encoders[i], X[i].T))
 
             # if noise has been specified for this neuron,
             if self.noise: 

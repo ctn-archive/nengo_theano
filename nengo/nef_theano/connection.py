@@ -130,4 +130,3 @@ class Case2(theano.Op):
         for ii in xrange(post_neurons_num):
             encoded_output[:, ii] = np.dot(transform[:, ii], pre_output)
         outstor[0][0] = encoded_output
-
