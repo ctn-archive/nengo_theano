@@ -180,7 +180,6 @@ class Ensemble:
             # ignore radius in direct mode
             else: source = decoded_input
             name = self.get_unique_name(name, self.decoded_input)
-            print name
             self.decoded_input[name] = filter.Filter(pstc, 
                 source=source, 
                 shape=(self.array_size, self.dimensions))
@@ -368,7 +367,7 @@ class Ensemble:
 
             for ei in self.encoded_input.values():
                 # add its values directly to the input current
-                J += ei.value
+                J += ei.value / dt
                 updates.update(ei.update(dt))
 
             # only do this if there is decoded_input
