@@ -35,7 +35,7 @@ class Probe(object):
         self.i = -1 # index of the last sample taken
 
         # create a filter to filter the data
-        self.filter = Filter(pstc, source=target)
+        self.filter = Filter(name=name, pstc=pstc, source=target)
 
     def update(self, dt):
         """

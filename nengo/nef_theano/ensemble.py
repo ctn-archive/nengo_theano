@@ -180,13 +180,13 @@ class Ensemble:
             # ignore radius in direct mode
             else: source = decoded_input
             name = self.get_unique_name(name, self.decoded_input)
-            self.decoded_input[name] = filter.Filter(pstc, 
-                source=source, 
+            self.decoded_input[name] = filter.Filter(
+                name=name, pstc=pstc, source=source, 
                 shape=(self.array_size, self.dimensions))
         elif encoded_input: 
             name = self.get_unique_name(name, self.encoded_input)
-            self.encoded_input[name] = filter.Filter(pstc, 
-                source=encoded_input, 
+            self.encoded_input[name] = filter.Filter(
+                name=name, pstc=pstc, source=encoded_input, 
                 shape=(self.array_size, self.neurons_num))
 
     def add_learned_termination(self, name, pre, error, pstc, 
@@ -367,14 +367,13 @@ class Ensemble:
 
             for ei in self.encoded_input.values():
                 # add its values directly to the input current
-                J += ei.value / dt
-                updates.update(ei.update(dt))
+                J += ei.value
+                updates.update(ei.update(dt, spikes=True))
 
             # only do this if there is decoded_input
             if len(self.decoded_input) > 0:
                 # add to input current for each neuron as
                 # represented input signal x preferred direction
-                #TODO: use TT.batched_dot function here instead?
                 for i in range(self.array_size):
                     J = TT.inc_subtensor(J[i],
                        TT.dot(self.shared_encoders[i], X[i].T))

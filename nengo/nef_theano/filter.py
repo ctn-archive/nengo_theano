@@ -32,6 +32,7 @@ class Filter:
             
         ### create shared variable to store the filtered value
         self.value = theano.shared(value, name=name)
+        self.name = name
 
     def set_source(self, source):
         """Set the source of data for this filter
@@ -41,15 +42,15 @@ class Filter:
         """
         self.source = source
 
-    def update(self, dt):
+    def update(self, dt, spikes=False):
         """
         :param float dt: the timestep of the update
         """
         if self.pstc >= dt:
             decay = TT.cast(np.exp(-dt / self.pstc), self.value.dtype)
             value_new = decay * self.value + (1 - decay) * self.source
+            if spikes: value_new /= dt
             return collections.OrderedDict([(self.value, value_new.astype('float32'))])
         else:
-            ### no filtering (pstc = 0), so just make the value the source
+            ### no filtering, so just make the value the source
             return collections.OrderedDict([(self.value, self.source.astype('float32'))])
-
