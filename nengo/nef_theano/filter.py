@@ -42,7 +42,7 @@ class Filter:
         """
         self.source = source
 
-    def update(self, dt, spikes=False):
+    def update(self, dt):
         """
         :param float dt: the timestep of the update
         """
