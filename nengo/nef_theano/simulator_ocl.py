@@ -17,61 +17,10 @@ import simulator
 import lif
 
 
-class Array(object):
-    def __init__(self, data, dtype, shape, strides):
-        self.data = data
-        self.dtype = dtype
-        self.shape = shape
-        self.strides = strides
-
-    @property
-    def ndim(self):
-        return len(self.shape)
-
-    @property
-    def size(self):
-        return int(np.prod(self.shape))
-
-    def empty_like(self):
-        buf = cl.Buffer(self.data.context,
-            flags=cl.mem_flags.READ_WRITE,
-            size=self.data.size)
-        return Array(buf,
-                dtype=self.dtype,
-                shape=list(self.shape),
-                strides=list(self.strides))
-
-    def __str__(self):
-        return '%s{%s, %s, strides=%s}' % (
-                'Array', self.dtype, self.shape, self.strides)
-    def __repr__(self):
-        return '%s{%s, %s, strides=%s}' % (
-                'Array', self.dtype, self.shape, self.strides)
-
-
-
-def to_device(queue, arr, flags=cl.mem_flags.READ_WRITE):
-    arr = np.asarray(arr)
-    buf = cl.Buffer(queue.context, flags, size=len(arr.data))
-    cl.enqueue_copy(queue, buf, arr.data).wait()
-    return Array(buf, arr.dtype, arr.shape, arr.strides)
-
-
-def empty(context, shape, dtype, flags=cl.mem_flags.READ_WRITE,
-        strides=None, order='C'):
-
-    dtype = np.dtype(dtype)
-    
-    if strides is None:
-        strides = [dtype.itemsize]
-        for shp in shape:
-            strides.append(strides[-1] * shp)
-        size = strides[-1]
-        strides = strides[:-1]
-        if order == 'C':
-            strides.reverse()
-    buf = cl.Buffer(context, flags, size=size)
-    return Array(buf, dtype, shape, strides)
+from ocl.array import Array, to_device, empty
+from ocl.gemv_batched import choose_gemv_batched_plan
+from ocl.elemwise import plan_copy
+from ocl.dot import plan_dot
 
 
 ocl_perform = {}
@@ -126,24 +75,17 @@ class SimulatorOCL(object):
                     continue
                 if vv in self.constant_vars:
                     continue
-                try:
-                    const_val = theano.tensor.basic.get_scalar_constant_value(vv)
-                    self.constant_vars[vv] = const_val
-                    continue
-                except theano.tensor.basic.NotScalarConstantError:
-                    pass
-                if vv.owner is None:
-                    if hasattr(vv, 'data'):
-                        val = vv.data
-                    else:
-                        val = vv.get_value(borrow=True)
-                    # XXX this logic should be optional
-                    if val.dtype == 'float64':
-                        val = val.astype('float32')
-                    if val.dtype == 'int64':
-                        val = val.astype('int32')
+                if hasattr(vv, 'data'):
+                    self.constant_vars[vv] = vv.data
+                elif vv.owner is None:
+                    val = vv.get_value(borrow=True)
+                    # TODO: optional casting logic?
                     self.ocl_vars[vv] = to_device(self.queue, val)
             ocl_alloc[type(node.op)](self.queue, self, node)
+            for vout in node.outputs:
+                if vout in self.ocl_vars:
+                    assert self.ocl_vars[vout].ndim == vout.ndim, node.op
+                    assert self.ocl_vars[vout].dtype == vout.dtype, node.op
             plans = ocl_perform[type(node.op)](self.queue, self, node)
             self.thunks.extend(plans)
 
@@ -163,259 +105,20 @@ class SimulatorOCL(object):
         return self.run_steps(n_steps)
 
 
-class Plan(object):
-
-    def __init__(self, dct):
-        self.__dict__.update(dct)
-
-    def __call__(self):
-        self._fn(*self._fn_args)
-        self._fn_args[0].finish()
-#
-# 
-#
-
-def gemv_batched_ref(context, B, M, N, alpha,
-                             Aoffset, AsB, AsM, AsN,
-                             XsN,
-                             beta,
-                             YsM,
-                            ):
-    return cl.Program(context, """
-        __kernel void fn(__global const float *A_data,
-                         __global const float *X_data,
-                         __global const int *X_offsets,
-                         __global float *Y_data,
-                         __global const int *Y_offsets
-                         )
-        {
-            const int bb = get_global_id(0);
-
-            A_data += %(Aoffset)s + bb * %(AsB)s;
-            X_data += X_offsets[bb];
-            Y_data += Y_offsets[bb];
-
-            for (int mm = 0; mm < %(M)s; ++mm)
-            {
-                float ksum = 0.0;
-                for (int nn = 0; nn < %(N)s; ++nn)
-                {
-                    ksum += A_data[nn * %(AsN)s  + mm * %(AsM)s] * X_data[nn * %(XsN)s];
-                }
-
-                if (%(beta)s == 0)
-                {
-                    Y_data[%(YsM)s * mm] = %(alpha)s * ksum;
-                }
-                else
-                {
-                    Y_data[%(YsM)s * mm] = %(beta)s * Y_data[%(YsM)s * mm] + %(alpha)s * ksum;
-                }
-            }
-        }
-        """ % locals()).build().fn
-
-
-def gemv_batched_parout_nolocal(context, B, M, N, alpha,
-                             Aoffset, AsB, AsM, AsN,
-                             XsN,
-                             beta,
-                             YsM,
-                            ):
-    return cl.Program(context, """
-        __kernel void fn(__global const float *A_data,
-                         __global const float *X_data,
-                         __global const int *X_offsets,
-                         __global float *Y_data,
-                         __global const int *Y_offsets
-                         )
-        {
-            const int mm0 = get_global_id(0);
-            const int bb = get_global_id(1);
-
-            A_data += %(Aoffset)s + bb * %(AsB)s;
-            X_data += X_offsets[bb];
-            Y_data += Y_offsets[bb];
-
-            for (int mm = mm0; mm < %(M)s; mm += get_local_size(0))
-            {
-                float ksum = 0.0;
-                for (int nn = 0; nn < %(N)s; ++nn)
-                {
-                    ksum += A_data[nn * %(AsN)s  + mm * %(AsM)s] * X_data[nn * %(XsN)s];
-                }
-
-                if (%(beta)s == 0)
-                {
-                    Y_data[%(YsM)s * mm] = %(alpha)s * ksum;
-                }
-                else
-                {
-                    Y_data[%(YsM)s * mm] = %(beta)s * Y_data[%(YsM)s * mm] + %(alpha)s * ksum;
-                }
-            }
-        }
-        """ % locals()).build().fn
-
-
-def gemv_batched_parout_local(context, B, M, N, alpha,
-                             Aoffset, AsB, AsM, AsN,
-                             XsN,
-                             beta,
-                             YsM,
-                            ):
-    return cl.Program(context, """
-        __kernel void fn(__global const float *A_data,
-                         __global const float *X_data,
-                         __global const int *X_offsets,
-                         __global float *Y_data,
-                         __global const int *Y_offsets,
-                         __local float * Xbuf
-                         )
-        {
-            const int bb = get_global_id(1);
-
-            A_data += %(Aoffset)s + bb * %(AsB)s;
-            X_data += X_offsets[bb];
-            Y_data += Y_offsets[bb];
-            __local float * Ybuf = Xbuf + %(N)s;
-
-            for(int nn = get_local_id(0); nn < %(N)s; nn += get_local_size(0))
-            {
-                Xbuf[nn] = X_data[nn * %(XsN)s];
-            }
-            barrier(CLK_LOCAL_MEM_FENCE);
-
-            for (int mm = get_local_id(0); mm < %(M)s; mm += get_local_size(0))
-            {
-                float tmp = 0.0;
-                for (int nn = 0; nn < %(N)s; nn += 1)
-                {
-                    tmp += A_data[nn * %(AsN)s + mm * %(AsM)s] * Xbuf[nn];
-                }
-
-                if (%(beta)s != 0)
-                {
-                    Y_data[mm * %(YsM)s] = Y_data[mm * %(YsM)s] * %(beta)s
-                        + %(alpha)s * tmp;
-                }
-                else
-                {
-                    Y_data[mm * %(YsM)s] = %(alpha)s * tmp;
-                }
-            }
-        }
-        """ % locals()).build().fn
-
-
-def choose_gemv_batched_plan(
-    BMN, alpha, Aparams, Xparams, beta, Yparams, queues,
-    ):
-    """
-    For each i, compute
-
-    Yi <- alpha * dot(Ai, Xi) + beta * Yi
-
-    Where
-    Yi = Y[Y_offsets[i]: Y_offsets[i] + YsM * M: YsM]
-    Xi = X[X_offsets[i]: X_offsets[i] + XsN * N: XsN]
-    Ai is an M x N matrix whose first element is at
-        A[A_offsets[i]] and is strided on the dimension
-        of size M by AsM, and is strided on the dimension
-        of size N by AsN.
-
-    """
-    B, M, N = BMN
-    A_buf, Aoffset, AsB, AsM, AsN = Aparams
-    X_buf, X_offsets, XsN = Xparams
-    Y_buf, Y_offsets, YsM = Yparams
-    queue = queues[0]
-    if np.float32 != A_buf.dtype:
-        raise NotImplementedError('A dtype', A_buf.dtype)
-    if np.float32 != X_buf.dtype:
-        raise NotImplementedError('X dtype', X_buf.dtype)
-    if np.float32 != Y_buf.dtype:
-        raise NotImplementedError('Y dtype', Y_buf.dtype)
-
-    # TODO: autotune decision/regression tree
-    if M == 1:
-        _fn = gemv_batched_ref(queue.context,
-            B, M, N,
-            alpha,
-            Aoffset, AsB, AsM, AsN,
-            XsN,
-            beta,
-            YsM)
-        global_shape = (B,)
-        local_shape = None
-        _fn_args = (queue, global_shape, local_shape, A_buf.data,
-                    X_buf.data, X_offsets.data,
-                    Y_buf.data, Y_offsets.data)
-    elif 0: # this is a good idea for A in Fortran order
-        _fn = gemv_batched_parout_nolocal(queue.context,
-            B, M, N,
-            alpha,
-            Aoffset, AsB, AsM, AsN,
-            XsN,
-            beta,
-            YsM)
-        mpergroup = min(queue.context.devices[0].max_work_group_size, M)
-        global_shape = (mpergroup, B,)
-        local_shape = (mpergroup, 1)
-        _fn_args = (queue, global_shape, local_shape, A_buf.data,
-                    X_buf.data, X_offsets.data,
-                    Y_buf.data, Y_offsets.data)
-    else: # this is a good idea for A in C order
-        _fn = gemv_batched_parout_local(queue.context,
-            B, M, N,
-            alpha,
-            Aoffset, AsB, AsM, AsN,
-            XsN,
-            beta,
-            YsM)
-        mpergroup = min(queue.context.devices[0].max_work_group_size, M)
-        global_shape = (mpergroup, B,)
-        local_shape = (mpergroup, 1)
-        local_mem = cl.LocalMemory(4 * N)
-        _fn_args = (queue, global_shape, local_shape, A_buf.data,
-                    X_buf.data, X_offsets.data,
-                    Y_buf.data, Y_offsets.data, local_mem)
-
-
-    return Plan(locals())
-
-
-def choose_copy(queue, src, dst):
-    _fn = cl.Program(queue.context, """
-        __kernel void fn(__global const float *src,
-                         __global float *dst
-                         )
-        {
-            dst[get_global_id(0)] = src[get_global_id(0)];
-        }
-        """ % locals()).build().fn
-    _fn_args = (queue, (src.data.size,), None, src.data, dst.data)
-    return Plan(locals())
-
 
 @alloc(simulator.MapGemv)
-def ocl_map_gemv(queue, sim, node):
+def ocl_map_gemv_a(queue, sim, node):
     try:
-        J = sim.ocl_vars[node.inputs[-1]]
+        Y = sim.ocl_vars[node.inputs[-1]]
     except KeyError:
-        J = sim.constant_vars[node.inputs[-1]]
-        J = np.asarray(J).reshape((1,) * node.inputs[-1].ndim)
-        assert np.all(node.inputs[-1].broadcastable)
-    sim.ocl_vars[node.outputs[0]] = empty(queue.context, J.shape, J.dtype)
+        Y = sim.constant_vars[node.inputs[-1]]
+    sim.ocl_vars[node.outputs[0]] = empty(queue.context, Y.shape, Y.dtype)
 
 
 @perform(simulator.MapGemv)
-def ocl_map_gemv(queue, sim, node):
+def ocl_map_gemv_p(queue, sim, node):
     alpha, A, X, beta, Y_in = [sim.ocl_vars.get(vi) for vi in node.inputs]
     Y_out, = [sim.ocl_vars[vi] for vi in node.outputs]
-
-    if Y_in is None:
-        Y_in_val = sim.constant_vars[node.inputs[-1]]
 
     # XXX: following depends on constants alpha, beta
     falpha = float(node.inputs[0].data)
@@ -428,18 +131,20 @@ def ocl_map_gemv(queue, sim, node):
     assert My == M
     assert Nx == N
 
+    rval = []
+
     A_offsets = to_device(queue, np.arange(B) * M * N )
     X_offsets = to_device(queue, np.arange(B) * N )
     Y_offsets = to_device(queue, np.arange(B) * M)
 
-    rval = []
-    if fbeta != 0:
-        if Y_in is None:
-            if np.any(Y_in_val != 0):
-                raise NotImplementedError()
+    if Y_in is None:
+        Y_in_val = sim.constant_vars[node.inputs[-1]]
+        if np.all(Y_in_val == 0):
             fbeta = 0
-        else:
-            rval.append(choose_copy(queue, Y_in, Y_out))
+        elif fbeta != 0:
+            Y_in = to_device(queue, np.asarray(Y_in_val))
+            rval.append(plan_copy(queue, Y_in, Y_out))
+
     gemv_plan = choose_gemv_batched_plan(BMN=A.shape, alpha=falpha,
             Aparams=(A, 0, M * N, N, 1),
             Xparams=(X, X_offsets, M),
@@ -508,13 +213,21 @@ def make_vector_p(queue, sim, node):
 
 @alloc(theano.tensor.basic.Reshape)
 def reshape_a(queue, sim, node):
-    X = node.inputs[0]
+    X, shp = node.inputs
     Xval = sim.ocl_vars[X]
-    shape_val = [sim.constant_vars[vv] for vv in node.inputs[1:]]
+    # -- N.B. we only support fixed shapes currently
+    shape_val = sim.constant_vars[shp]
+    try:
+        shape_val = [int(shape_val)]
+    except:
+        pass
+
+    assert len(shape_val) == node.outputs[0].ndim
+    assert node.outputs[0].dtype == node.inputs[0].dtype
 
     if np.prod(Xval.shape) == np.prod(shape_val) == 1:
         Yval = Array(Xval.data, dtype=Xval.dtype,
-                shape=shape_val,
+                shape=list(shape_val),
                 strides=[0] * len(shape_val))
     else:
         theano.printing.debugprint(node.outputs)
@@ -533,7 +246,7 @@ def flatten_a(queue, sim, node):
     Xval = sim.ocl_vars[X]
     # XXX verify that strides match is correct
     Yval = Array(Xval.data, Xval.dtype,
-            shape=(np.prod(Xval.shape),),
+            shape=[int(np.prod(Xval.shape))],
             strides=[0])
     sim.ocl_vars[node.outputs[0]] = Yval
 
@@ -543,28 +256,73 @@ def flatten_p(queue, sim, node):
 
 @alloc(theano.tensor.basic.Dot)
 def dot_a(queue, sim, node):
-    X, Y,= node.inputs
+    X, Y = node.inputs
+    Z, = node.outputs
 
-    if X in sim.ocl_vars:
-        Xval = sim.ocl_vars[X]
+    Xval = sim.constant_vars[X]
+    Yval = sim.ocl_vars[Y]
+
+    if Xval.ndim == 0 and Yval.ndim == 2:
+        assert X.ndim == 2 # XXX such garbage here, clean it up.
+        Zshape = list(Yval.shape)
+        Zdtype = np.dtype(node.outputs[0].dtype)
+        Zstrides = [Yval.shape[1] * Zdtype.itemsize, Zdtype.itemsize]
+    elif Xval.ndim == 2 and Yval.ndim == 2:
+        Zshape = [Xval.shape[0], Yval.shape[1]]
+        Zdtype = np.dtype(node.outputs[0].dtype)
+        Zstrides = [Yval.shape[1] * Zdtype.itemsize, Zdtype.itemsize]
     else:
-        Xval = sim.constant_vars[X]
-        if np.all(Xval == 1):
-            # XXX figure out what shape X was meant to have
-            Yval = sim.ocl_vars[Y]
-            if Yval.size == 1:
-                sim.ocl_vars[node.outputs[0]] = Yval
-                return
+        raise NotImplementedError('dot with shapes', (Xval.shape, Yval.shape))
 
-    raise NotImplementedError()
-
-    Zval = empty(Xval.data.context, node.outputs[0].dtype,
-            shape=(Xval.shape[0], Yval.shape[1]),
-            strides=[0])
+    size = Zstrides[0] * Zshape[0]
+    Zdata = cl.Buffer(queue.context,
+                      flags=cl.mem_flags.READ_WRITE,
+                      size=int(size))
+    Zval = Array(Zdata, Zdtype, Zshape, Zstrides)
+    sim.ocl_vars[Z] = Zval
 
 @perform(theano.tensor.basic.Dot)
 def dot_p(queue, sim, node):
-    return []
+    X, Y = node.inputs
+    Z, = node.outputs
+    Xtype = ocldtype(X.dtype)
+    Ytype = ocldtype(Y.dtype)
+    Ztype = ocldtype(Z.dtype)
+
+    sumtype = Ztype # TODO: consider more precision here
+
+    if X.ndim == 2 and Y.ndim == 2:
+        if X in sim.constant_vars:
+            # -- will fail for non 1x1 arrays
+            X = float(sim.constant_vars[X])
+
+            Yval = sim.ocl_vars[Y]
+            Zval = sim.ocl_vars[Z]
+            assert Yval.shape[0] == 1
+
+            Ys0, Ys1 = Yval.itemstrides
+            Zs0, Zs1 = Zval.itemstrides
+
+            _fn = cl.Program(queue.context, """
+                __kernel void foo(
+                    __global const %(Ytype)s *Y,
+                    __global %(Ztype)s *Z)
+                {
+                    int ii = get_global_id(0);
+                    int jj = get_global_id(1);
+                    Z[ii * %(Zs0)s + jj * %(Zs1)s] =
+                        %(X)s * Y[ii * %(Ys0)s + jj * %(Ys1)s];
+                }
+                """ % locals()).build().foo
+
+            _fn_args = (queue, Zval.shape, None, Yval.data, Zval.data)
+        else:
+            return plan_dot(queue,
+                sim.ocl_vars[X], sim.ocl_vars[Y], sim.ocl_vars[Z])
+    else:
+        raise NotImplementedError('dot with shapes', (Xval.shape, Yval.shape))
+
+    return [Plan(locals())]
 
 
 @alloc(lif.LIF_Op)
@@ -663,12 +421,12 @@ def elemwise_a(queue, sim, node):
         shape = np.asarray([1] * vv.ndim)
         for vi in ocl_inputs:
             if vi is not None:
-                assert len(shape) == len(vi.shape)
-                shape = np.maximum(shape, vi.shape)
+                assert len(shape) == len(vi.shape), (shape, vi.shape)
+                shape = list(np.maximum(shape, vi.shape))
         for vi in const_inputs:
             if vi is not None and hasattr(vi, 'shape'):
                 assert len(shape) == len(vi.shape)
-                shape = np.maximum(shape, vi.shape)
+                shape = list(np.maximum(shape, vi.shape))
 
         sim.ocl_vars[vv] = empty(queue.context,
                 list(shape), vv.dtype)
