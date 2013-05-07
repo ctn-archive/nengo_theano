@@ -73,7 +73,7 @@ class SimulatorOCL(object):
         self.step = theano.function([], [], updates=updates_items, 
             mode=theano.Mode(
                 optimizer='default',
-                linker=theano.gof.vm.VM_Linker(use_cloop=False, allow_gc=None),
+                linker=theano.gof.vm.VM_Linker(use_cloop=False, allow_gc=False),
                 ))
 
         # -- replace the theano function with a new list of thunks
@@ -84,6 +84,7 @@ class SimulatorOCL(object):
         self._plans = ([], [])
         self._ocl_vars = ({}, {})
         self.constant_vars = {}
+        self._node_plans = ({}, {})
 
         # -- allocate workspace for the first plan (plan 0)
         self.ocl_vars = self._ocl_vars[0]
@@ -98,6 +99,7 @@ class SimulatorOCL(object):
                 elif vv.owner is None:
                     val = vv.get_value(borrow=True)
                     self._ocl_vars[0][vv] = to_device(self.queue, val)
+                    self.queue.finish()
             ocl_alloc[type(node.op)](self.queue, self, node)
             for vout in node.outputs:
                 if vout in self._ocl_vars[0]:
@@ -120,7 +122,7 @@ class SimulatorOCL(object):
                     continue
                 assert not hasattr(vv, 'data')
                 if vv.owner is None:
-                    # XXX is this correct? Which ops might be destructive?
+                    # -- vv is a shared var that isn't updated
                     self._ocl_vars[1][vv] = self._ocl_vars[0][vv]
             ocl_alloc[type(node.op)](self.queue, self, node)
             for vout in node.outputs:
@@ -146,9 +148,18 @@ class SimulatorOCL(object):
                 # but not reading it. Ideally, we would not even compute this
                 # quantity.
                 pass
-            # -- throw out one of them, does it matter which one?
-            self._ocl_vars[0][ivar] = self._ocl_vars[1][ovar]
 
+            # -- throw out the ones we just allocated, and set it
+            #    up so that the plans in plan 1 write their results
+            #    to the inputs of the first set of vars
+            if ivar not in self._ocl_vars[0]:
+                # -- if ivar is not an input to anything, then this is the
+                #    first time we've seen it
+                val = ivar.get_value(borrow=True)
+                self._ocl_vars[0][ivar] = to_device(self.queue, val)
+                self.queue.finish()
+
+            self._ocl_vars[1][ovar] = self._ocl_vars[0][ivar]
 
         # -- build plans for evaluating ocl_vals[0]
         for node in self.nodes:
@@ -157,6 +168,7 @@ class SimulatorOCL(object):
             for plan in plans:
                 plan.node = node
             self._plans[0].extend(plans)
+            self._node_plans[0][node] = plans
 
         # -- build plans for evaluating ocl_vals[0]
         for node in self.nodes:
@@ -165,7 +177,9 @@ class SimulatorOCL(object):
             for plan in plans:
                 plan.node = node
             self._plans[1].extend(plans)
+            self._node_plans[1][node] = plans
         del self.ocl_vars
+        self.queue.finish()
 
 
     def copy_to_shared(self):
@@ -188,21 +202,31 @@ class SimulatorOCL(object):
         """
         ocl_vars = self._ocl_vars[self.n_steps % 2]
         for (ivar, ovar) in self.step.fn.updated_vars.items():
-            nparray = ivar.get_value(nparray, borrow=True)
+            nparray = ivar.get_value(borrow=True)
             assert nparray.dtype == ocl_vars[ivar].dtype
             assert nparray.shape == tuple(ocl_vars[ivar].shape)
             ocl_vars[ivar].set(nparray, self.queue)
         self.queue.finish()
 
-    def run_steps(self, N, sync_w_theano_shared_vars=True):
+    def run_steps(self, N, sync_w_theano_shared_vars=True,
+                  run_theano_too=False):
         """
         Run the simulator for N steps of duration `self.dt`
         """
         if sync_w_theano_shared_vars and self.n_steps > -1:
             self.copy_from_shared()
 
+        if 0:
+          for ivar in self._ocl_vars[0]:
+            print ivar, self._ocl_vars[0][ivar].get().max(),
+            print self._ocl_vars[1][ivar].get().max()
+            if self.step.fn.storage_map[ivar][0] is not None:
+                print '  ---> ', self.step.fn.storage_map[ivar][0].max()
+
+
         if self.profiling:
             for i in xrange(N):
+                self.n_steps += 1
                 evs = []
                 plans = self._plans[self.n_steps % 2]
                 try:
@@ -216,16 +240,71 @@ class SimulatorOCL(object):
                 for e, p in zip(evs, plans):
                     self.t_used.setdefault(p.node, 0)
                     self.t_used[p.node] +=  e.profile.end - e.profile.start
+        elif run_theano_too:
+            storage_map = self.step.fn.storage_map
+            for i in xrange(N):
                 self.n_steps += 1
+                ocl_vars = self._ocl_vars[self.n_steps % 2]
+                node_plans = self._node_plans[self.n_steps % 2]
+                for jj, (node, thunk) in enumerate(
+                        zip(self.step.fn.nodes, self.step.fn.thunks)):
+
+                    def any_inaccuracy(msg, theano_vars):
+                        inaccuracy = False
+                        seen = set()
+                        for ovar in theano_vars:
+                            if ovar in seen:
+                                continue
+                            if ovar in ocl_vars:
+                                refval = storage_map[ovar][0]
+                                try:
+                                    oclval = ocl_vars[ovar].get()
+                                except (AssertionError, ValueError):
+                                    print ocl_vars[ovar].structure
+                                    raise
+                                assert refval.dtype == oclval.dtype
+                                assert refval.shape == oclval.shape
+                                if not np.allclose(refval, oclval,
+                                                   atol=1e-4, rtol=1e-4):
+                                    print msg, self.n_steps, 'Node', node, 'messed up', ovar
+                                    print '  stats', refval.max(), refval.min(), refval.mean(),
+                                    print 'vs', oclval.max(), oclval.min(), oclval.mean()
+                                    print '  diff abs', np.max(abs(refval - oclval)),
+                                    print 'rel', np.max(abs(refval - oclval) / abs(refval + oclval + 1e-12))
+                                    inaccuracy=True
+                            seen.add(ovar)
+                        return inaccuracy
+
+                    if any_inaccuracy('pre', node.inputs):
+                        raise RuntimeError('Inaccurate computations')
+
+                    # -- run the theano thunk
+                    thunk()
+
+                    # -- run the ocl equivalent
+                    for p in node_plans[node]:
+                        p._fn(*p._fn_args)
+                    self.queue.finish()
+
+                    if any_inaccuracy('post', node.inputs + node.outputs):
+                        raise RuntimeError('Inaccurate computations')
+                    else:
+                        print '.',
+                print 'done pass', self.n_steps
+                # -- apply updates to theano fn
+                for (ivar, ovar) in self.step.fn.updated_vars.items():
+                    storage_map[ivar][0] = storage_map[ovar][0]
+
         else:
             for i in xrange(N):
+                self.n_steps += 1
                 try:
                     for p in self._plans[self.n_steps % 2]:
                         p._fn(*p._fn_args)
+                        self.queue.finish()
                 except Exception, e:
                     e.args = e.args + ({'plan': p, 'node': p.node},)
                     raise
-                self.n_steps += 1
         if sync_w_theano_shared_vars:
             self.copy_to_shared()  # -- calls queue.finish
         else:
@@ -242,6 +321,7 @@ class SimulatorOCL(object):
 
 @alloc(simulator.MapGemv)
 def ocl_map_gemv_a(queue, sim, node):
+    # TODO: work in-place on Y_in if node.destroy_map is set
     try:
         Y = sim.ocl_vars[node.inputs[-1]]
     except KeyError:
@@ -370,10 +450,26 @@ def reshape_p(queue, sim, node):
 def flatten_a(queue, sim, node):
     X,= node.inputs
     Xval = sim.ocl_vars[X]
-    # XXX verify that strides match is correct
-    Yval = Array(queue, data=Xval.data, dtype=Xval.dtype,
-            shape=[int(np.prod(Xval.shape))],
-            strides=[Xval.dtype.itemsize])
+    need_stride = Xval.dtype.itemsize
+
+    # currently this is a little different from the c contiguous
+    # flag logic in array.Array, so we redo it here
+    c_contig = True
+    for si, ri in reversed(zip(Xval.shape, Xval.strides)):
+        if si == 1:
+            continue
+        else:
+            if ri == need_stride:
+                need_stride *= si
+            else:
+                c_contig = False
+
+    if c_contig:
+        Yval = Array(queue, data=Xval.data, dtype=Xval.dtype,
+                shape=[int(np.prod(Xval.shape))],
+                strides=[Xval.dtype.itemsize])
+    else:
+        raise NotImplementedError()
     sim.ocl_vars[node.outputs[0]] = Yval
 
 @perform(theano.tensor.basic.Flatten)
@@ -513,32 +609,40 @@ def lif_p(queue, sim, node):
             %(Vtype)s v = voltage[gid];
             %(RTtype)s rt = refractory_time[gid];
             %(Jtype)s input_current = J[gid];
-            %(OStype)s spiked = 0;
+            int spiked = 0;
 
             for (int ii = 0; ii < %(upsample)s; ++ii)
             {
               %(Vtype)s dV = dt * tau_rc_inv * (input_current - v);
+              %(RTtype)s post_ref = 1.0 - (rt - dt) * dt_inv;
               v += dV;
-              %(RTtype)s post_ref = - rt * dt_inv;
               v = v > 0 ?
-                  v * (post_ref < 0 ? 0 : post_ref < 1 ? post_ref : 1)
+                  v * (post_ref < 0 ? 0.0 : post_ref < 1 ? post_ref : 1.0)
                   : 0;
-              spiked |= v > V_threshold;
+              const int spiked_ii = v > V_threshold;
               %(Vtype)s overshoot = (v - V_threshold) / dV;
               %(RTtype)s spiketime = dt * (1.0 - overshoot);
 
-              v = v * (1.0 - spiked);
-              rt = spiked ? spiketime + tau_ref : rt - dt;
+              if (spiked_ii)
+              {
+                v = 0.0;
+                rt = spiketime + tau_ref;
+                spiked = 1;
+              }
+              else
+              {
+                rt -= dt;
+              }
             }
 
             out_voltage[gid] = v;
             out_refractory_time[gid] = rt;
-            out_spiked[gid] = spiked;
+            out_spiked[gid] = spiked ? (%(OStype)s) 1 : (%(OStype)s) 0;
         }
         """ % locals()).build().foo
     v = sim.ocl_vars[_v]
 
-    _fn_args = (queue, v.shape, None,
+    _fn_args = (queue, (v.size,), None,
         sim.ocl_vars[_ic].data,
         sim.ocl_vars[_v].data,
         sim.ocl_vars[_rt].data,
@@ -566,9 +670,68 @@ def elemwise_a(queue, sim, node):
 
         sim.ocl_vars[vv] = empty(queue,
                 list(shape), np.dtype(vv.dtype))
+        print shape
 
 @perform(theano.tensor.elemwise.Elemwise)
 def elemwise_p(queue, sim, node):
-    # XXX
-    return []
+    if len(node.outputs) > 1:
+        raise NotImplementedError()
+    if node.outputs[0].ndim > 3:
+        raise NotImplementedError()
+
+    c_body_inputs = {}
+    for inum, ivar in enumerate(node.inputs + node.outputs):
+        if ivar in sim.ocl_vars:
+            varname = 'I%i' % inum
+            indexes = []
+            for jj in range(ivar.ndim):
+                indexes.append('gid%i * I%i_s%i' % (jj, inum, jj))
+            c_body_inputs[ivar] = '%s[%s]' % (varname, ' + '.join(indexes))
+        else:
+            c_body_inputs[ivar] = str(float(sim.constant_vars[ivar]))
+
+    ctype_body = node.op.scalar_op.c_code(
+        None,
+        'name',
+        [c_body_inputs[vv] for vv in node.inputs],
+        [c_body_inputs[vv] for vv in node.outputs],
+        {})
+    import re
+
+    # -- replace the numpy typedefs
+    ctype_body = re.sub('npy_float64', 'double', ctype_body)
+    ctype_body = re.sub('npy_float32', 'float', ctype_body)
+
+    for inum, ivar in enumerate(node.inputs + node.outputs):
+        if ivar in sim.ocl_vars:
+            ival = sim.ocl_vars[ivar]
+            for jj, sj in enumerate(ival.strides):
+                ctype_body = re.sub('I%i_s%i' % (inum, jj), str(sj),
+                                    ctype_body)
+
+
+    params = ['__global %s * I%s' % (sim.ocl_vars[ivar].ocldtype, inum)
+        for inum, ivar in enumerate(node.inputs + node.outputs)
+        if ivar in sim.ocl_vars]
+
+    joined_params = ', '.join(params)
+
+    _fn = cl.Program(queue.context, """
+        __kernel void foo(
+            %(joined_params)s
+                     )
+        {
+            const int gid0 = get_global_id(0);
+            const int gid1 = get_global_id(1);
+            const int gid2 = get_global_id(2);
+
+            %(ctype_body)s
+        }
+        """ % locals()).build().foo
+
+    _fn_args = (queue, sim.ocl_vars[node.outputs[0]].shape, None,)
+    _fn_args = _fn_args + tuple([sim.ocl_vars[ivar].data
+        for inum, ivar in enumerate(node.inputs + node.outputs)
+        if ivar in sim.ocl_vars])
+    return [Plan(locals())]
 

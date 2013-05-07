@@ -40,7 +40,7 @@ if 0:
     sim.run(0.5)
     print "runtime: ", time.time() - start_time, "seconds"
 
-if 1:
+if 0:
     sim2 = SimulatorOCL(net, profiling=True)
     start_time = time.time()
     print "starting simulation (OCL with profiling)"
@@ -55,9 +55,16 @@ if 1:
         t_total += t * 1e-9
     print 'total time in OCL:', t_total
 
-if 1:
+
+if 0:
     sim3 = SimulatorOCL(net, profiling=False)
     start_time = time.time()
     print "starting simulation (OCL)"
     sim3.run(0.5)
     print "runtime: ", time.time() - start_time, "seconds"
+
+if 1:
+    sim4 = SimulatorOCL(net, profiling=False)
+    start_time = time.time()
+    print "starting simulation with error detection (OCL)"
+    sim4.run(0.5, run_theano_too=True)

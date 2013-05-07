@@ -22,6 +22,7 @@ class Array(cl.array.Array):
         if 0 in self.strides:
             print self.strides
         self.offset = offset
+        assert self.data.size >= self.size * self.dtype.itemsize
 
     @property
     def itemstrides(self):
@@ -58,6 +59,19 @@ class Array(cl.array.Array):
     def structure(self):
         return (self.dtype, self.shape, self.strides, self.offset)
 
+    def get(self, queue=None):
+        if queue is None:
+            queue = self.queue
+        hostbuf = np.empty(shape=(self.data.size,), dtype='int8')
+        #print self.data.size
+        #print hostbuf.shape
+        assert self.data.size >= self.size * self.dtype.itemsize
+        #print self.structure, hostbuf.size
+        cl.enqueue_copy(queue, hostbuf, self.data)
+        rval = np.ndarray(buffer=hostbuf, strides=self.strides,
+                          offset=self.offset, shape=self.shape, dtype=self.dtype)
+        return rval
+
 
 def ocldtype(obj):
     obj = str(obj)
@@ -75,11 +89,14 @@ def to_device(queue, arr, flags=cl.mem_flags.READ_WRITE):
     arr = np.asarray(arr)
     buf = cl.Buffer(queue.context, flags, size=len(arr.data))
     cl.enqueue_copy(queue, buf, arr.data).wait()
-    return Array(queue,
+    rval = Array(queue,
                  data=buf,
                  dtype=arr.dtype,
                  shape=arr.shape,
                  strides=arr.strides)
+    debugval = rval.get(queue)
+    assert np.all(arr == debugval)
+    return rval
 
 
 # consider array.empty

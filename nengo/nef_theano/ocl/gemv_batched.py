@@ -237,7 +237,7 @@ def plan_map_gemv(queue, alpha, A, X, beta, Y, Y_in=None):
     Ys0_in, Ys1_in, = Y_in.itemstrides
 
     Atype = A.ocldtype
-    Xtype = Y.ocldtype
+    Xtype = X.ocldtype
     Ytype = Y.ocldtype
 
     # TODO: is there another way to do this other than retrieving all these
@@ -257,7 +257,7 @@ def plan_map_gemv(queue, alpha, A, X, beta, Y, Y_in=None):
 
             A_data += %(Aoffset)s + bb * %(As0)s;
             X_data += %(Xoffset)s + bb * %(Xs0)s;
-            X_data += %(Xoffset)s + bb * %(Xs0)s;
+            Y_data += %(Yoffset)s + bb * %(Ys0)s;
             Y_in_data += %(Y_in_offset)s + bb * %(Ys0_in)s;
 
             for (int mm = 0; mm < %(M)s; ++mm)
