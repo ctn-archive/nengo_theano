@@ -49,8 +49,11 @@ if 1:
     foo = [(t, n) for (n, t) in sim2.t_used.items()]
     foo.sort()
     foo.reverse()
+    t_total = 0
     for t, n in foo:
         print t * 1e-9, n
+        t_total += t * 1e-9
+    print 'total time in OCL:', t_total
 
 if 1:
     sim3 = SimulatorOCL(net, profiling=False)

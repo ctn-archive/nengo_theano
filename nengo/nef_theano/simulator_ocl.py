@@ -68,17 +68,28 @@ class SimulatorOCL(object):
                 updates.update(node.update(self.network.dt))
 
         # create graph and return optimized update function
-        self.step = theano.function([], [], updates=updates.items())
+        # -- use py linker to avoid wasting time compiling C code
+        updates_items = updates.items()
+        self.step = theano.function([], [], updates=updates_items, 
+            mode=theano.Mode(
+                optimizer='default',
+                linker=theano.gof.vm.VM_Linker(use_cloop=False, allow_gc=None),
+                ))
 
-        self.order = self.step.maker.fgraph.toposort()
+        # -- replace the theano function with a new list of thunks
+        self.nodes = self.step.fn.nodes
 
-        self.plans = []
-        self.ocl_vars = {}
+        # -- allocate two plans and vars for double-buffered updates
+        self.n_steps = -1
+        self._plans = ([], [])
+        self._ocl_vars = ({}, {})
         self.constant_vars = {}
 
-        for node in self.order:
+        # -- allocate workspace for the first plan (plan 0)
+        self.ocl_vars = self._ocl_vars[0]
+        for node in self.nodes:
             for vv in node.inputs:
-                if vv in self.ocl_vars:
+                if vv in self._ocl_vars[0]:
                     continue
                 if vv in self.constant_vars:
                     continue
@@ -86,57 +97,147 @@ class SimulatorOCL(object):
                     self.constant_vars[vv] = vv.data
                 elif vv.owner is None:
                     val = vv.get_value(borrow=True)
-                    # TODO: optional casting logic?
-                    self.ocl_vars[vv] = to_device(self.queue, val)
+                    self._ocl_vars[0][vv] = to_device(self.queue, val)
             ocl_alloc[type(node.op)](self.queue, self, node)
             for vout in node.outputs:
-                if vout in self.ocl_vars:
-                    assert self.ocl_vars[vout].ndim == vout.ndim, node.op
-                    assert self.ocl_vars[vout].dtype == vout.dtype, node.op
+                if vout in self._ocl_vars[0]:
+                    assert self._ocl_vars[0][vout].ndim == vout.ndim, node.op
+                    assert self._ocl_vars[0][vout].dtype == vout.dtype, node.op
+                else:
+                    assert vout in self.constant_vars
+
+        # -- set up the outputs from plan 0 as the inputs for plan 1
+        for (ivar, ovar) in self.step.fn.updated_vars.items():
+            self._ocl_vars[1][ivar] = self._ocl_vars[0][ovar]
+
+        # -- allocate workspace for the second plan (plan 1)
+        self.ocl_vars = self._ocl_vars[1]
+        for node in self.nodes:
+            for vv in node.inputs:
+                if vv in self._ocl_vars[1]:
+                    continue
+                if vv in self.constant_vars:
+                    continue
+                assert not hasattr(vv, 'data')
+                if vv.owner is None:
+                    # XXX is this correct? Which ops might be destructive?
+                    self._ocl_vars[1][vv] = self._ocl_vars[0][vv]
+            ocl_alloc[type(node.op)](self.queue, self, node)
+            for vout in node.outputs:
+                if vout in self._ocl_vars[1]:
+                    assert self._ocl_vars[1][vout].ndim == vout.ndim, node.op
+                    assert self._ocl_vars[1][vout].dtype == vout.dtype, node.op
+                else:
+                    assert vout in self.constant_vars
+        del self.ocl_vars
+
+        # -- wire the outputs of plan 1 back into plan 0
+        for (ivar, ovar) in self.step.fn.updated_vars.items():
+            if ivar in self._ocl_vars[0]:
+                assert self._ocl_vars[0][ivar].dtype == self._ocl_vars[1][ovar].dtype
+                if self._ocl_vars[0][ivar].shape != self._ocl_vars[1][ovar].shape:
+                    print ivar
+                    print ovar
+                    print self._ocl_vars[0][ivar].structure
+                    print self._ocl_vars[1][ovar].structure
+                    raise ValueError('ivar and ovar do not match')
+            else:
+                # The theano graph was storing a value to a shared variable
+                # but not reading it. Ideally, we would not even compute this
+                # quantity.
+                pass
+            # -- throw out one of them, does it matter which one?
+            self._ocl_vars[0][ivar] = self._ocl_vars[1][ovar]
+
+
+        # -- build plans for evaluating ocl_vals[0]
+        for node in self.nodes:
+            self.ocl_vars = self._ocl_vars[0]
             plans = ocl_perform[type(node.op)](self.queue, self, node)
             for plan in plans:
                 plan.node = node
-            self.plans.extend(plans)
+            self._plans[0].extend(plans)
 
-        # XXX create another program that does the update
-        # in the other direction (double-buffer the ocl_vars)
+        # -- build plans for evaluating ocl_vals[0]
+        for node in self.nodes:
+            self.ocl_vars = self._ocl_vars[1]
+            plans = ocl_perform[type(node.op)](self.queue, self, node)
+            for plan in plans:
+                plan.node = node
+            self._plans[1].extend(plans)
+        del self.ocl_vars
 
-    def run_steps(self, N):
-        # -- copy from shared variable inputs into internal state dict
-        # -- run N steps
-        # -- copy from state to shared variables
-        fns = [p._fn for p in self.plans]
-        args = [p._fn_args for p in self.plans]
-        fns_args_plans = zip(fns, args, self.plans)
+
+    def copy_to_shared(self):
+        """
+        Copy data from the theano graph's shared variables into self.ocl_vars
+        """
+        ocl_vars = self._ocl_vars[self.n_steps % 2]
+        for (ivar, ovar) in self.step.fn.updated_vars.items():
+            try:
+                nparray = ocl_vars[ivar].get(self.queue)
+            except AssertionError:
+                print ocl_vars[ivar].structure
+                raise
+            ivar.set_value(nparray, borrow=True)
+        self.queue.finish()
+
+    def copy_from_shared(self):
+        """
+        Copy data from self.ocl_vars into the theano graph's shared variables
+        """
+        ocl_vars = self._ocl_vars[self.n_steps % 2]
+        for (ivar, ovar) in self.step.fn.updated_vars.items():
+            nparray = ivar.get_value(nparray, borrow=True)
+            assert nparray.dtype == ocl_vars[ivar].dtype
+            assert nparray.shape == tuple(ocl_vars[ivar].shape)
+            ocl_vars[ivar].set(nparray, self.queue)
+        self.queue.finish()
+
+    def run_steps(self, N, sync_w_theano_shared_vars=True):
+        """
+        Run the simulator for N steps of duration `self.dt`
+        """
+        if sync_w_theano_shared_vars and self.n_steps > -1:
+            self.copy_from_shared()
+
         if self.profiling:
             for i in xrange(N):
                 evs = []
+                plans = self._plans[self.n_steps % 2]
                 try:
-                    for fn, arg, p in fns_args_plans:
-                        evs.append(fn(*arg))
+                    for p in plans:
+                        evs.append(p._fn(*p._fn_args))
                 except Exception, e:
-                    e.args = e.args + ({'plan': p, 'node': node},)
+                    e.args = e.args + ({'plan': p, 'node': p.node},)
                     raise
                 self.queue.finish()
-                assert len(evs) == len(self.plans)
-                for e, p in zip(evs, self.plans):
+                assert len(evs) == len(plans)
+                for e, p in zip(evs, plans):
                     self.t_used.setdefault(p.node, 0)
                     self.t_used[p.node] +=  e.profile.end - e.profile.start
+                self.n_steps += 1
         else:
             for i in xrange(N):
                 try:
-                    for fn, arg, p in fns_args_plans:
-                        fn(*arg)
+                    for p in self._plans[self.n_steps % 2]:
+                        p._fn(*p._fn_args)
                 except Exception, e:
-                    e.args = e.args + ({'plan': p, 'node': node},)
+                    e.args = e.args + ({'plan': p, 'node': p.node},)
                     raise
+                self.n_steps += 1
+        if sync_w_theano_shared_vars:
+            self.copy_to_shared()  # -- calls queue.finish
+        else:
             self.queue.finish()
 
-
-    def run(self, approx_sim_time):
+    def run(self, approx_sim_time, **kwargs):
+        """
+        Run the simulator for a number of steps that advances the total
+        simulation time by approximately `approx_sim_time`
+        """
         n_steps = int(approx_sim_time / self.network.dt)
-        return self.run_steps(n_steps)
-
+        return self.run_steps(n_steps, **kwargs)
 
 
 @alloc(simulator.MapGemv)
@@ -145,7 +246,7 @@ def ocl_map_gemv_a(queue, sim, node):
         Y = sim.ocl_vars[node.inputs[-1]]
     except KeyError:
         Y = sim.constant_vars[node.inputs[-1]]
-    sim.ocl_vars[node.outputs[0]] = empty(queue.context, Y.shape, Y.dtype)
+    sim.ocl_vars[node.outputs[0]] = empty(queue, Y.shape, Y.dtype)
 
 
 @perform(simulator.MapGemv)
@@ -202,9 +303,10 @@ def dimshuffle_a(queue, sim, node):
     # -- augment
     for augm in node.op.augment:
         Yshape.insert(augm, 1)
-        Ystrides.insert(augm, 0)
+        Ystrides.insert(augm, X.dtype.itemsize)
 
-    Y = Array(X.data, X.dtype, Yshape, Ystrides)
+    Y = Array(queue, data=X.data, dtype=X.dtype,
+              shape=Yshape, strides=Ystrides)
     sim.ocl_vars[Yvar] = Y
 
 @perform(theano.tensor.elemwise.DimShuffle)
@@ -250,9 +352,9 @@ def reshape_a(queue, sim, node):
     assert node.outputs[0].dtype == node.inputs[0].dtype
 
     if np.prod(Xval.shape) == np.prod(shape_val) == 1:
-        Yval = Array(Xval.data, dtype=Xval.dtype,
+        Yval = Array(queue, data=Xval.data, dtype=Xval.dtype,
                 shape=list(shape_val),
-                strides=[0] * len(shape_val))
+                strides=[Xval.dtype.itemsize] * len(shape_val))
     else:
         theano.printing.debugprint(node.outputs)
         print 'X stats', Xval.shape, Xval.strides
@@ -269,9 +371,9 @@ def flatten_a(queue, sim, node):
     X,= node.inputs
     Xval = sim.ocl_vars[X]
     # XXX verify that strides match is correct
-    Yval = Array(Xval.data, Xval.dtype,
+    Yval = Array(queue, data=Xval.data, dtype=Xval.dtype,
             shape=[int(np.prod(Xval.shape))],
-            strides=[0])
+            strides=[Xval.dtype.itemsize])
     sim.ocl_vars[node.outputs[0]] = Yval
 
 @perform(theano.tensor.basic.Flatten)
@@ -302,7 +404,8 @@ def dot_a(queue, sim, node):
     Zdata = cl.Buffer(queue.context,
                       flags=cl.mem_flags.READ_WRITE,
                       size=int(size))
-    Zval = Array(Zdata, Zdtype, Zshape, Zstrides)
+    Zval = Array(queue, data=Zdata, dtype=Zdtype,
+                 shape=Zshape, strides=Zstrides)
     sim.ocl_vars[Z] = Zval
 
 @perform(theano.tensor.basic.Dot)
@@ -356,7 +459,7 @@ def lif_a(queue, sim, node):
     nv = sim.ocl_vars[v].empty_like()
     nrt = sim.ocl_vars[rt].empty_like()
     # TDOO: use int8 for spikes
-    spiked = empty(queue.context, nv.shape, dtype=np.float32)
+    spiked = empty(queue, nv.shape, dtype=np.float32)
 
     sim.ocl_vars[node.outputs[0]] = nv
     sim.ocl_vars[node.outputs[1]] = nrt
@@ -461,7 +564,7 @@ def elemwise_a(queue, sim, node):
                 assert len(shape) == len(vi.shape)
                 shape = list(np.maximum(shape, vi.shape))
 
-        sim.ocl_vars[vv] = empty(queue.context,
+        sim.ocl_vars[vv] = empty(queue,
                 list(shape), np.dtype(vv.dtype))
 
 @perform(theano.tensor.elemwise.Elemwise)

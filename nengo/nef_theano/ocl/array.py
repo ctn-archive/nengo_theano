@@ -1,22 +1,27 @@
 import numpy as np
 import pyopencl as cl
+import pyopencl.array
 
-class Array(object):
-    def __init__(self, data, dtype, shape, strides, offset=0):
-        self.data = data
-        self.dtype = np.dtype(dtype)
-        self.shape = map(int, shape) # -- makes new list too
-        self.strides = map(int, strides) # -- makes new list too
+# XXX: use cl.array.Array, which has strides, flags
+
+class Array(cl.array.Array):
+    def __init__(self, queue, shape, dtype, order='C', allocator=None,
+                 data=None, strides=None, offset=0):
+        try:
+            np.dtype(dtype)
+        except Exception, e:
+            e.args = e.args + (dtype,)
+            raise
+        cl.array.Array.__init__(self, queue,
+                                shape=tuple(map(int, shape)),
+                                allocator=allocator,
+                                dtype=np.dtype(dtype),
+                                order=order,
+                                data=data,
+                                strides=tuple(map(int, strides)))
+        if 0 in self.strides:
+            print self.strides
         self.offset = offset
-        assert type(self.shape) == list
-
-    @property
-    def ndim(self):
-        return len(self.shape)
-
-    @property
-    def size(self):
-        return int(np.prod(self.shape))
 
     @property
     def itemstrides(self):
@@ -24,29 +29,34 @@ class Array(object):
         for si in self.strides:
             assert 0 == si % self.dtype.itemsize
             rval.append(si // self.dtype.itemsize)
-        return rval
+        return tuple(rval)
 
     def empty_like(self):
-        buf = cl.Buffer(self.data.context,
+        # XXX consider whether to allocate just enough for data
+        # or keep using the full buffer.
+        data = cl.Buffer(self.data.context,
             flags=cl.mem_flags.READ_WRITE,
             size=self.data.size)
-        return Array(buf,
-                dtype=self.dtype,
-                shape=list(self.shape),
-                strides=list(self.strides))
+        return Array(self.queue,
+                     shape=self.shape,
+                     dtype=self.dtype,
+                     data=data,
+                     strides=self.strides,
+                     offset=self.offset,
+                    )
 
-    def __str__(self):
-        return '%s{%s, shape=%s}' % (
-                self.__class__.__name__, self.dtype, self.shape)
-
-    def __repr__(self):
-        return '%s{%s, shape=%s, strides=%s, bufsize=%i, offset=%s}' % (
-            self.__class__.__name__, self.dtype, self.shape, self.strides,
-            self.data.size, self.offset)
-
+    # TODO: call this ctype, use cl.tools.dtype_to_ctype
     @property
     def ocldtype(self):
         return ocldtype(self.dtype)
+
+    @property
+    def ndim(self):
+        return len(self.shape)
+
+    @property
+    def structure(self):
+        return (self.dtype, self.shape, self.strides, self.offset)
 
 
 def ocldtype(obj):
@@ -60,15 +70,20 @@ def ocldtype(obj):
     else:
         raise NotImplementedError('ocldtype', obj)
 
-
+# consider array.to_device
 def to_device(queue, arr, flags=cl.mem_flags.READ_WRITE):
     arr = np.asarray(arr)
     buf = cl.Buffer(queue.context, flags, size=len(arr.data))
     cl.enqueue_copy(queue, buf, arr.data).wait()
-    return Array(buf, arr.dtype, list(arr.shape), list(arr.strides))
+    return Array(queue,
+                 data=buf,
+                 dtype=arr.dtype,
+                 shape=arr.shape,
+                 strides=arr.strides)
 
 
-def empty(context, shape, dtype, flags=cl.mem_flags.READ_WRITE,
+# consider array.empty
+def empty(queue, shape, dtype, flags=cl.mem_flags.READ_WRITE,
         strides=None, order='C'):
 
     dtype = np.dtype(dtype)
@@ -85,10 +100,10 @@ def empty(context, shape, dtype, flags=cl.mem_flags.READ_WRITE,
         else:
             raise ValueError(order)
     try:
-        buf = cl.Buffer(context, flags, size=bufsize)
+        buf = cl.Buffer(queue.context, flags, size=bufsize)
     except:
-        print context, flags, type(flags), bufsize, type(bufsize)
+        print queue, flags, type(flags), bufsize, type(bufsize)
         raise
-    return Array(buf, dtype, list(shape), list(strides))
+    return Array(queue, data=buf, dtype=dtype, shape=shape, strides=strides)
 
 
