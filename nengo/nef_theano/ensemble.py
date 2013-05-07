@@ -1,5 +1,4 @@
 import theano
-#from theano.tensor.shared_randomstreams import RandomStreams
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as TT
 import numpy as np
@@ -114,7 +113,7 @@ class Ensemble:
             threshold = self.srng.uniform(
                 size=(self.array_size, self.neurons_num),
                 low=intercept[0], high=intercept[1])
-            alpha, self.bias = theano.function(
+            self.alpha, self.bias = theano.function(
                 [], self.neurons.make_alpha_bias(max_rates, threshold))()
 
             # force to 32 bit for consistency / speed
@@ -123,7 +122,7 @@ class Ensemble:
             # compute encoders
             self.encoders = self.make_encoders(encoders=encoders)
             # combine encoders and gain for simplification
-            self.encoders = (self.encoders.T * alpha.T).T
+            self.encoders = (self.encoders.T * self.alpha.T).T
             self.shared_encoders = theano.shared(self.encoders, 
                 name='ensemble.shared_encoders')
 
@@ -355,7 +354,7 @@ class Ensemble:
     
         for di in self.decoded_input.values(): 
             # add its values to the total decoded input
-            X += di.value
+            X += di.value 
             updates.update(di.update(dt))
 
         # if we're in spiking mode, then look at the input current and 
@@ -367,8 +366,8 @@ class Ensemble:
 
             for ei in self.encoded_input.values():
                 # add its values directly to the input current
-                J += ei.value
-                updates.update(ei.update(dt, spikes=True))
+                J += (ei.value.T * self.alpha.T).T
+                updates.update(ei.update(dt))
 
             # only do this if there is decoded_input
             if len(self.decoded_input) > 0:

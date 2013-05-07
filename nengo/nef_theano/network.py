@@ -200,6 +200,8 @@ class Network(object):
                             (post.array_size, post.neurons_num, 
                              pre.array_size, pre.neurons_num)
 
+                    print 'setting pre_output=spikes'
+
                     # get spiking output from pre population
                     pre_output = pre.neurons.output 
 
