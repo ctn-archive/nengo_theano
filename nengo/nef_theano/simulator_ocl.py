@@ -43,12 +43,18 @@ def alloc(op_cls):
 
 
 class SimulatorOCL(object):
-    def __init__(self, network, context=None):
+    def __init__(self, network, context=None, profiling=False):
         self.network = network
         if context is None:
             context = cl.create_some_context()
         self.context = context
-        self.queue = cl.CommandQueue(context)
+        self.profiling = profiling
+        if profiling:
+            self.queue = cl.CommandQueue(context,
+                properties=cl.command_queue_properties.PROFILING_ENABLE)
+            self.t_used = {}
+        else:
+            self.queue = cl.CommandQueue(context)
 
         # dictionary for all variables
         # and the theano description of how to compute them 
@@ -66,7 +72,7 @@ class SimulatorOCL(object):
 
         self.order = self.step.maker.fgraph.toposort()
 
-        self.thunks = []
+        self.plans = []
         self.ocl_vars = {}
         self.constant_vars = {}
 
@@ -88,7 +94,9 @@ class SimulatorOCL(object):
                     assert self.ocl_vars[vout].ndim == vout.ndim, node.op
                     assert self.ocl_vars[vout].dtype == vout.dtype, node.op
             plans = ocl_perform[type(node.op)](self.queue, self, node)
-            self.thunks.extend(plans)
+            for plan in plans:
+                plan.node = node
+            self.plans.extend(plans)
 
         # XXX create another program that does the update
         # in the other direction (double-buffer the ocl_vars)
@@ -97,8 +105,32 @@ class SimulatorOCL(object):
         # -- copy from shared variable inputs into internal state dict
         # -- run N steps
         # -- copy from state to shared variables
-        for i in xrange(N):
-            self.step()
+        fns = [p._fn for p in self.plans]
+        args = [p._fn_args for p in self.plans]
+        fns_args_plans = zip(fns, args, self.plans)
+        if self.profiling:
+            for i in xrange(N):
+                evs = []
+                try:
+                    for fn, arg, p in fns_args_plans:
+                        evs.append(fn(*arg))
+                except Exception, e:
+                    e.args = e.args + ({'plan': p, 'node': node},)
+                    raise
+                self.queue.finish()
+                assert len(evs) == len(self.plans)
+                for e, p in zip(evs, self.plans):
+                    self.t_used.setdefault(p.node, 0)
+                    self.t_used[p.node] +=  e.profile.end - e.profile.start
+        else:
+            for i in xrange(N):
+                try:
+                    for fn, arg, p in fns_args_plans:
+                        fn(*arg)
+                except Exception, e:
+                    e.args = e.args + ({'plan': p, 'node': node},)
+                    raise
+            self.queue.finish()
 
 
     def run(self, approx_sim_time):
@@ -335,6 +367,13 @@ def lif_a(queue, sim, node):
 def lif_p(queue, sim, node):
     _v, _rt, _ic, _dt = node.inputs
     _ov, _ort, _os = node.outputs
+
+    J = sim.ocl_vars[_ic]
+    V = sim.ocl_vars[_v]
+    RT = sim.ocl_vars[_rt]
+    OV = sim.ocl_vars[_ov]
+    ORT = sim.ocl_vars[_ort]
+    OS = sim.ocl_vars[_os]
     
     dt = float(_dt.value)
     tau_rc = node.op.tau_rc
@@ -346,40 +385,44 @@ def lif_p(queue, sim, node):
     upsample_dt = dt / upsample
     upsample_dt_inv = 1.0 / upsample_dt
 
-    # XXX GET DTYPES RIGHT
+    Jtype = J.ocldtype
+    Vtype = V.ocldtype
+    RTtype = RT.ocldtype
+    OStype = OS.ocldtype
+
     _fn = cl.Program(queue.context, """
         __kernel void foo(
-            __global const float *J,
-            __global const float *voltage,
-            __global const float *refractory_time,
-            __global float *out_voltage,
-            __global float *out_refractory_time,
-            __global char *out_spiked
+            __global const %(Jtype)s *J,
+            __global const %(Vtype)s *voltage,
+            __global const %(RTtype)s *refractory_time,
+            __global %(Vtype)s *out_voltage,
+            __global %(RTtype)s *out_refractory_time,
+            __global %(OStype)s *out_spiked
                      )
         {
-            const float dt = %(upsample_dt)s;
-            const float dt_inv = %(upsample_dt_inv)s;
-            const float tau_ref = %(tau_ref)s;
-            const float tau_rc_inv = %(tau_rc_inv)s;
-            const float V_threshold = %(V_threshold)s;
+            const %(RTtype)s dt = %(upsample_dt)s;
+            const %(RTtype)s dt_inv = %(upsample_dt_inv)s;
+            const %(RTtype)s tau_ref = %(tau_ref)s;
+            const %(Vtype)s tau_rc_inv = %(tau_rc_inv)s;
+            const %(Vtype)s V_threshold = %(V_threshold)s;
 
-            int gid = get_global_id(0);
-            float v = voltage[gid];
-            float rt = refractory_time[gid];
-            float input_current = J[gid];
-            char spiked = 0;
+            const int gid = get_global_id(0);
+            %(Vtype)s v = voltage[gid];
+            %(RTtype)s rt = refractory_time[gid];
+            %(Jtype)s input_current = J[gid];
+            %(OStype)s spiked = 0;
 
             for (int ii = 0; ii < %(upsample)s; ++ii)
             {
-              float dV = dt * tau_rc_inv * (input_current - v);
+              %(Vtype)s dV = dt * tau_rc_inv * (input_current - v);
               v += dV;
-              float post_ref = - rt * dt_inv;
+              %(RTtype)s post_ref = - rt * dt_inv;
               v = v > 0 ?
                   v * (post_ref < 0 ? 0 : post_ref < 1 ? post_ref : 1)
                   : 0;
               spiked |= v > V_threshold;
-              float overshoot = (v - V_threshold) / dV;
-              float spiketime = dt * (1.0 - overshoot);
+              %(Vtype)s overshoot = (v - V_threshold) / dV;
+              %(RTtype)s spiketime = dt * (1.0 - overshoot);
 
               v = v * (1.0 - spiked);
               rt = spiked ? spiketime + tau_ref : rt - dt;
@@ -390,8 +433,9 @@ def lif_p(queue, sim, node):
             out_spiked[gid] = spiked;
         }
         """ % locals()).build().foo
+    v = sim.ocl_vars[_v]
 
-    _fn_args = (queue, _v.shape, None,
+    _fn_args = (queue, v.shape, None,
         sim.ocl_vars[_ic].data,
         sim.ocl_vars[_v].data,
         sim.ocl_vars[_rt].data,

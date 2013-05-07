@@ -29,20 +29,32 @@ net.connect('D', 'B', func=pow) # throw in some recurrency whynot
 
 if 0:
     start_time = time.time()
-    print "starting simulation"
+    print "starting simulation (net.run)"
     net.run(0.5)
     print "runtime: ", time.time() - start_time, "seconds"
 
 if 0:
     sim = Simulator(net)
     start_time = time.time()
-    print "starting simulation"
+    print "starting simulation (Simulator)"
     sim.run(0.5)
     print "runtime: ", time.time() - start_time, "seconds"
 
 if 1:
-    sim2 = SimulatorOCL(net)
+    sim2 = SimulatorOCL(net, profiling=True)
     start_time = time.time()
-    print "starting simulation"
+    print "starting simulation (OCL with profiling)"
     sim2.run(0.5)
+    print "runtime: ", time.time() - start_time, "seconds"
+    foo = [(t, n) for (n, t) in sim2.t_used.items()]
+    foo.sort()
+    foo.reverse()
+    for t, n in foo:
+        print t * 1e-9, n
+
+if 1:
+    sim3 = SimulatorOCL(net, profiling=False)
+    start_time = time.time()
+    print "starting simulation (OCL)"
+    sim3.run(0.5)
     print "runtime: ", time.time() - start_time, "seconds"
