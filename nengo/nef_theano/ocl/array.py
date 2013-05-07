@@ -2,13 +2,13 @@ import numpy as np
 import pyopencl as cl
 
 class Array(object):
-    def __init__(self, data, dtype, shape, strides):
+    def __init__(self, data, dtype, shape, strides, offset=0):
         self.data = data
-        self.dtype = dtype
-        self.shape = shape
-        self.strides = strides
+        self.dtype = np.dtype(dtype)
+        self.shape = map(int, shape) # -- makes new list too
+        self.strides = map(int, strides) # -- makes new list too
+        self.offset = offset
         assert type(self.shape) == list
-        assert type(self.strides) == list
 
     @property
     def ndim(self):
@@ -40,11 +40,17 @@ class Array(object):
                 self.__class__.__name__, self.dtype, self.shape)
 
     def __repr__(self):
-        return '%s{%s, shape=%s, strides=%s}' % (
-                self.__class__.__name__, self.dtype, self.shape, self.strides)
+        return '%s{%s, shape=%s, strides=%s, bufsize=%i, offset=%s}' % (
+            self.__class__.__name__, self.dtype, self.shape, self.strides,
+            self.data.size, self.offset)
+
+    @property
+    def ocldtype(self):
+        return ocldtype(self.dtype)
 
 
 def ocldtype(obj):
+    obj = str(obj)
     if isinstance(obj, basestring):
         return {
             'float32': 'float',
@@ -68,14 +74,21 @@ def empty(context, shape, dtype, flags=cl.mem_flags.READ_WRITE,
     dtype = np.dtype(dtype)
     
     if strides is None:
-        strides = [dtype.itemsize]
-        for shp in shape:
-            strides.append(strides[-1] * shp)
-        size = strides[-1]
-        strides = strides[:-1]
-        if order == 'C':
-            strides.reverse()
-    buf = cl.Buffer(context, flags, size=size)
+        strides = [int(dtype.itemsize)]
+        if order.upper() == 'C':
+            for shp in reversed(shape):
+                strides = [strides[0] * int(shp)] + strides
+            bufsize = strides[0]
+            strides = strides[1:]
+        elif order.upper() == 'F':
+            raise NotImplementedError()
+        else:
+            raise ValueError(order)
+    try:
+        buf = cl.Buffer(context, flags, size=bufsize)
+    except:
+        print context, flags, type(flags), bufsize, type(bufsize)
+        raise
     return Array(buf, dtype, list(shape), list(strides))
 
 

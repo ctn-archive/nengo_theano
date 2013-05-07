@@ -2,9 +2,15 @@ import pyopencl as cl
 from plan import Plan
 
 def plan_copy(queue, src, dst):
+    if not (src.shape == dst.shape):
+        raise ValueError()
+    if (src.data.size != dst.data.size):
+        raise NotImplementedError('size', (src, dst))
+    if (src.strides != dst.strides):
+        raise NotImplementedError('strides', (src, dst))
+    if (src.offset != dst.offset):
+        raise NotImplementedError('offset', (src, dst))
     # XXX: only copy the parts of the buffer that are part of the logical Array
-    if not (src.size == dst.size == src.data.size == dst.data.size):
-        raise NotImplementedError()
     _fn = cl.Program(queue.context, """
         __kernel void fn(__global const float *src,
                          __global float *dst

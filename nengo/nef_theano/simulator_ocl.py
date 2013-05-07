@@ -18,9 +18,10 @@ import lif
 
 
 from ocl.array import Array, to_device, empty
-from ocl.gemv_batched import choose_gemv_batched_plan
+from ocl.gemv_batched import plan_map_gemv
 from ocl.elemwise import plan_copy
 from ocl.dot import plan_dot
+from ocl.plan import Plan
 
 
 ocl_perform = {}
@@ -131,8 +132,6 @@ def ocl_map_gemv_p(queue, sim, node):
     assert My == M
     assert Nx == N
 
-    rval = []
-
     A_offsets = to_device(queue, np.arange(B) * M * N )
     X_offsets = to_device(queue, np.arange(B) * N )
     Y_offsets = to_device(queue, np.arange(B) * M)
@@ -142,17 +141,10 @@ def ocl_map_gemv_p(queue, sim, node):
         if np.all(Y_in_val == 0):
             fbeta = 0
         elif fbeta != 0:
-            Y_in = to_device(queue, np.asarray(Y_in_val))
-            rval.append(plan_copy(queue, Y_in, Y_out))
+            Y_in = to_device(queue, np.asarray(Y_in_val * fbeta))
+            fbeta = 1
 
-    gemv_plan = choose_gemv_batched_plan(BMN=A.shape, alpha=falpha,
-            Aparams=(A, 0, M * N, N, 1),
-            Xparams=(X, X_offsets, M),
-            beta=fbeta,
-            Yparams=(Y_out, Y_offsets, N),
-            queues=[queue])
-    rval.append(gemv_plan)
-    return rval
+    return [plan_map_gemv(queue, falpha, A, X, fbeta, Y_out, Y_in)]
 
 
 @alloc(theano.tensor.elemwise.DimShuffle)
@@ -285,11 +277,6 @@ def dot_a(queue, sim, node):
 def dot_p(queue, sim, node):
     X, Y = node.inputs
     Z, = node.outputs
-    Xtype = ocldtype(X.dtype)
-    Ytype = ocldtype(Y.dtype)
-    Ztype = ocldtype(Z.dtype)
-
-    sumtype = Ztype # TODO: consider more precision here
 
     if X.ndim == 2 and Y.ndim == 2:
         if X in sim.constant_vars:
@@ -302,6 +289,10 @@ def dot_p(queue, sim, node):
 
             Ys0, Ys1 = Yval.itemstrides
             Zs0, Zs1 = Zval.itemstrides
+            Ytype = Yval.ocldtype
+            Ztype = Zval.ocldtype
+
+            sumtype = Ztype # TODO: consider more precision here
 
             _fn = cl.Program(queue.context, """
                 __kernel void foo(
@@ -343,7 +334,8 @@ def lif_a(queue, sim, node):
 @perform(lif.LIF_Op)
 def lif_p(queue, sim, node):
     _v, _rt, _ic, _dt = node.inputs
-
+    _ov, _ort, _os = node.outputs
+    
     dt = float(_dt.value)
     tau_rc = node.op.tau_rc
     tau_ref  = node.op.tau_ref
@@ -399,9 +391,6 @@ def lif_p(queue, sim, node):
         }
         """ % locals()).build().foo
 
-    _v, _rt, _ic, _dt = node.inputs
-    _ov, _ort, _os = node.outputs
-
     _fn_args = (queue, _v.shape, None,
         sim.ocl_vars[_ic].data,
         sim.ocl_vars[_v].data,
@@ -429,7 +418,7 @@ def elemwise_a(queue, sim, node):
                 shape = list(np.maximum(shape, vi.shape))
 
         sim.ocl_vars[vv] = empty(queue.context,
-                list(shape), vv.dtype)
+                list(shape), np.dtype(vv.dtype))
 
 @perform(theano.tensor.elemwise.Elemwise)
 def elemwise_p(queue, sim, node):
