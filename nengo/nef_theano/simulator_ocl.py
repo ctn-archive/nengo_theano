@@ -109,8 +109,17 @@ class SimulatorOCL(object):
                     assert vout in self.constant_vars
 
         # -- set up the outputs from plan 0 as the inputs for plan 1
+        # -- and the outputs from plan 1 as the inputs for plan 0
         for (ivar, ovar) in self.step.fn.updated_vars.items():
             self._ocl_vars[1][ivar] = self._ocl_vars[0][ovar]
+            if ivar not in self._ocl_vars[0]:
+                # -- if ivar is not an input to anything, then this is the
+                #    first time we've seen it
+                val = ivar.get_value(borrow=True)
+                self._ocl_vars[0][ivar] = to_device(self.queue, val)
+                self.queue.finish()
+
+            self._ocl_vars[1][ovar] = self._ocl_vars[0][ivar]
 
         # -- allocate workspace for the second plan (plan 1)
         self.ocl_vars = self._ocl_vars[1]
@@ -124,42 +133,16 @@ class SimulatorOCL(object):
                 if vv.owner is None:
                     # -- vv is a shared var that isn't updated
                     self._ocl_vars[1][vv] = self._ocl_vars[0][vv]
-            ocl_alloc[type(node.op)](self.queue, self, node)
-            for vout in node.outputs:
-                if vout in self._ocl_vars[1]:
-                    assert self._ocl_vars[1][vout].ndim == vout.ndim, node.op
-                    assert self._ocl_vars[1][vout].dtype == vout.dtype, node.op
-                else:
-                    assert vout in self.constant_vars
+            if any(vv not in self.ocl_vars for vv in node.outputs):
+                ocl_alloc[type(node.op)](self.queue, self, node)
+                for vout in node.outputs:
+                    if vout in self._ocl_vars[1]:
+                        assert self._ocl_vars[1][vout].ndim == vout.ndim, node.op
+                        assert self._ocl_vars[1][vout].dtype == vout.dtype, node.op
+                    else:
+                        assert vout in self.constant_vars
         del self.ocl_vars
 
-        # -- wire the outputs of plan 1 back into plan 0
-        for (ivar, ovar) in self.step.fn.updated_vars.items():
-            if ivar in self._ocl_vars[0]:
-                assert self._ocl_vars[0][ivar].dtype == self._ocl_vars[1][ovar].dtype
-                if self._ocl_vars[0][ivar].shape != self._ocl_vars[1][ovar].shape:
-                    print ivar
-                    print ovar
-                    print self._ocl_vars[0][ivar].structure
-                    print self._ocl_vars[1][ovar].structure
-                    raise ValueError('ivar and ovar do not match')
-            else:
-                # The theano graph was storing a value to a shared variable
-                # but not reading it. Ideally, we would not even compute this
-                # quantity.
-                pass
-
-            # -- throw out the ones we just allocated, and set it
-            #    up so that the plans in plan 1 write their results
-            #    to the inputs of the first set of vars
-            if ivar not in self._ocl_vars[0]:
-                # -- if ivar is not an input to anything, then this is the
-                #    first time we've seen it
-                val = ivar.get_value(borrow=True)
-                self._ocl_vars[0][ivar] = to_device(self.queue, val)
-                self.queue.finish()
-
-            self._ocl_vars[1][ovar] = self._ocl_vars[0][ivar]
 
         # -- build plans for evaluating ocl_vals[0]
         for node in self.nodes:
@@ -286,7 +269,18 @@ class SimulatorOCL(object):
                         p._fn(*p._fn_args)
                     self.queue.finish()
 
-                    if any_inaccuracy('post', node.inputs + node.outputs):
+                    vars_that_should_match = node.inputs + node.outputs
+                    for opos, iposlist in getattr(node.op, 'destroy_map', {}).items():
+                        for ipos in reversed(sorted(iposlist)):
+                            vars_that_should_match.pop(ipos)
+                    if any_inaccuracy('post', vars_that_should_match):
+                        print node_plans[node]
+                        print p._fn
+                        print p.text
+                        print p._fn_args
+                        print vars_that_should_match
+                        print [ocl_vars[vv].data for vv in node.inputs if vv in ocl_vars]
+                        print [ocl_vars[vv].data for vv in node.outputs]
                         raise RuntimeError('Inaccurate computations')
                     else:
                         print '.',
@@ -296,15 +290,24 @@ class SimulatorOCL(object):
                     storage_map[ivar][0] = storage_map[ovar][0]
 
         else:
-            for i in xrange(N):
-                self.n_steps += 1
-                try:
-                    for p in self._plans[self.n_steps % 2]:
+            N2 = N // 2
+            A = (self.n_steps + 1) % 2
+            B = (self.n_steps + 2) % 2
+            plans = self._plans[A] + self._plans[B]
+            foo = [(p._fn, p._fn_args, p) for p in plans]
+            try:
+                for i in xrange(N2):
+                    self.n_steps += 2
+                    for fn, args, p in foo:
+                        fn(*args)
+                if N % 2:
+                    self.n_steps += 1
+                    for p in self._plans[A]:
                         p._fn(*p._fn_args)
-                        self.queue.finish()
-                except Exception, e:
-                    e.args = e.args + ({'plan': p, 'node': p.node},)
-                    raise
+            except Exception, e:
+                e.args = e.args + ({'plan': p, 'node': p.node},)
+                raise
+
         if sync_w_theano_shared_vars:
             self.copy_to_shared()  # -- calls queue.finish
         else:
@@ -446,14 +449,11 @@ def reshape_a(queue, sim, node):
 def reshape_p(queue, sim, node):
     return []
 
-@alloc(theano.tensor.basic.Flatten)
-def flatten_a(queue, sim, node):
-    X,= node.inputs
-    Xval = sim.ocl_vars[X]
-    need_stride = Xval.dtype.itemsize
 
+def flatten_c_contig(Xval):
     # currently this is a little different from the c contiguous
     # flag logic in array.Array, so we redo it here
+    need_stride = Xval.dtype.itemsize
     c_contig = True
     for si, ri in reversed(zip(Xval.shape, Xval.strides)):
         if si == 1:
@@ -463,8 +463,14 @@ def flatten_a(queue, sim, node):
                 need_stride *= si
             else:
                 c_contig = False
+    return c_contig
 
-    if c_contig:
+
+@alloc(theano.tensor.basic.Flatten)
+def flatten_a(queue, sim, node):
+    X,= node.inputs
+    Xval = sim.ocl_vars[X]
+    if flatten_c_contig(Xval):
         Yval = Array(queue, data=Xval.data, dtype=Xval.dtype,
                 shape=[int(np.prod(Xval.shape))],
                 strides=[Xval.dtype.itemsize])
@@ -474,7 +480,30 @@ def flatten_a(queue, sim, node):
 
 @perform(theano.tensor.basic.Flatten)
 def flatten_p(queue, sim, node):
-    return []
+    X, = node.inputs
+    Xval = sim.ocl_vars[X]
+    Y, = node.outputs
+    Yval = sim.ocl_vars[Y]
+    if Xval.data is Yval.data:
+        return []
+    elif flatten_c_contig(Xval) and flatten_c_contig(Yval):
+        Xtype = Xval.ocldtype
+        Ytype = Yval.ocldtype
+        _fn = cl.Program(queue.context, """
+            __kernel void foo(
+                __global const %(Xtype)s *X,
+                __global %(Ytype)s *Y)
+            {
+                int ii = get_global_id(0);
+                Y[ii] = X[ii];
+            }
+            """ % locals()).build().foo
+        _fn_args = (queue, (Xval.size,), None, Xval.data, Yval.data)
+        return [Plan(locals())]
+
+    else:
+        print Xval.shape, Yval.shape
+        raise NotImplementedError('Flatten')
 
 @alloc(theano.tensor.basic.Dot)
 def dot_a(queue, sim, node):
@@ -679,6 +708,11 @@ def elemwise_p(queue, sim, node):
     if node.outputs[0].ndim > 3:
         raise NotImplementedError()
 
+    for ovar in node.outputs:
+        for ivar in node.inputs:
+            if ivar in sim.ocl_vars:
+                assert sim.ocl_vars[ivar].data is not sim.ocl_vars[ovar].data
+
     c_body_inputs = {}
     for inum, ivar in enumerate(node.inputs + node.outputs):
         if ivar in sim.ocl_vars:
@@ -705,18 +739,23 @@ def elemwise_p(queue, sim, node):
     for inum, ivar in enumerate(node.inputs + node.outputs):
         if ivar in sim.ocl_vars:
             ival = sim.ocl_vars[ivar]
-            for jj, sj in enumerate(ival.strides):
+            for jj, sj in enumerate(ival.itemstrides):
+                if ival.shape[jj] == 1:
+                    sj = 0
                 ctype_body = re.sub('I%i_s%i' % (inum, jj), str(sj),
                                     ctype_body)
 
 
-    params = ['__global %s * I%s' % (sim.ocl_vars[ivar].ocldtype, inum)
+    params = ['__global %s %s * I%s' % (
+            'const' if ivar in node.inputs else '',
+            sim.ocl_vars[ivar].ocldtype,
+            inum)
         for inum, ivar in enumerate(node.inputs + node.outputs)
         if ivar in sim.ocl_vars]
 
     joined_params = ', '.join(params)
 
-    _fn = cl.Program(queue.context, """
+    text = """
         __kernel void foo(
             %(joined_params)s
                      )
@@ -727,8 +766,9 @@ def elemwise_p(queue, sim, node):
 
             %(ctype_body)s
         }
-        """ % locals()).build().foo
+        """ % locals()
 
+    _fn = cl.Program(queue.context, text).build().foo
     _fn_args = (queue, sim.ocl_vars[node.outputs[0]].shape, None,)
     _fn_args = _fn_args + tuple([sim.ocl_vars[ivar].data
         for inum, ivar in enumerate(node.inputs + node.outputs)
