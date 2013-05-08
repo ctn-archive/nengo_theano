@@ -294,12 +294,13 @@ class SimulatorOCL(object):
             A = (self.n_steps + 1) % 2
             B = (self.n_steps + 2) % 2
             plans = self._plans[A] + self._plans[B]
-            foo = [(p._fn, p._fn_args, p) for p in plans]
+            foo = [(p._enqueue_args, p) for p in plans]
+            foo2 = [p._enqueue_args for p in plans]
+            enqueue = cl.enqueue_nd_range_kernel
+            self.n_steps += 2 * N2
             try:
                 for i in xrange(N2):
-                    self.n_steps += 2
-                    for fn, args, p in foo:
-                        fn(*args)
+                    [enqueue(*enq) for enq in foo2]
                 if N % 2:
                     self.n_steps += 1
                     for p in self._plans[A]:
