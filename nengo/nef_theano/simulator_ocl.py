@@ -28,6 +28,7 @@ ocl_perform = {}
 ocl_alloc = {}
 
 
+# -- decorator to register an OCL "perform" method for Theano Op `op_cls`
 def perform(op_cls):
     def deco(f):
         ocl_perform[op_cls] = f
@@ -35,6 +36,7 @@ def perform(op_cls):
     return deco
 
 
+# -- decorator to register an OCL "alloc" method for Theano Op `op_cls`
 def alloc(op_cls):
     def deco(f):
         ocl_alloc[op_cls] = f
@@ -43,6 +45,13 @@ def alloc(op_cls):
 
 
 class SimulatorOCL(object):
+    """
+    Simulator that uses OpenCL instead of numpy to evaluate the Theano "step"
+    function and run the simulator for the network.
+
+    This class draws on alternate implementations for the Ops in the step
+    function. It
+    """
     def __init__(self, network, context=None, profiling=False):
         self.network = network
         if context is None:
@@ -207,23 +216,7 @@ class SimulatorOCL(object):
                 print '  ---> ', self.step.fn.storage_map[ivar][0].max()
 
 
-        if self.profiling:
-            for i in xrange(N):
-                self.n_steps += 1
-                evs = []
-                plans = self._plans[self.n_steps % 2]
-                try:
-                    for p in plans:
-                        evs.append(p._fn(*p._fn_args))
-                except Exception, e:
-                    e.args = e.args + ({'plan': p, 'node': p.node},)
-                    raise
-                self.queue.finish()
-                assert len(evs) == len(plans)
-                for e, p in zip(evs, plans):
-                    self.t_used.setdefault(p.node, 0)
-                    self.t_used[p.node] +=  e.profile.end - e.profile.start
-        elif run_theano_too:
+        if run_theano_too:
             storage_map = self.step.fn.storage_map
             for i in xrange(N):
                 self.n_steps += 1
@@ -290,23 +283,39 @@ class SimulatorOCL(object):
                     storage_map[ivar][0] = storage_map[ovar][0]
 
         else:
-            N2 = N // 2
-            A = (self.n_steps + 1) % 2
-            B = (self.n_steps + 2) % 2
-            plans = self._plans[A] + self._plans[B]
-            foo = [(p._fn, p._fn_args, p) for p in plans]
-            try:
-                for i in xrange(N2):
-                    self.n_steps += 2
-                    for fn, args, p in foo:
-                        fn(*args)
-                if N % 2:
+            if self.profiling:
+                for i in xrange(N):
                     self.n_steps += 1
-                    for p in self._plans[A]:
-                        p._fn(*p._fn_args)
-            except Exception, e:
-                e.args = e.args + ({'plan': p, 'node': p.node},)
-                raise
+                    evs = []
+                    plans = self._plans[self.n_steps % 2]
+                    for p in plans:
+                        evs.append(p._fn(*p._fn_args))
+                    self.queue.finish()
+                    assert len(evs) == len(plans)
+                    for e, p in zip(evs, plans):
+                        self.t_used.setdefault(p.node, 0)
+                        self.t_used[p.node] +=  e.profile.end - e.profile.start
+            else:
+                N2 = N // 2
+                A = (self.n_steps + 1) % 2
+                B = (self.n_steps + 2) % 2
+                plans = self._plans[A] + self._plans[B]
+                queues = [p._enqueue_args[0] for p in plans]
+                kerns = [p._enqueue_args[1] for p in plans]
+                gsize = [p._enqueue_args[2] for p in plans]
+                lsize = [p._enqueue_args[3] for p in plans]
+                try:
+                    [map(cl.enqueue_nd_range_kernel,
+                                queues, kerns, gsize, lsize)
+                        for i in xrange(N2)]
+                    self.n_steps += N2 * 2
+                    if N % 2:
+                        self.n_steps += 1
+                        for p in self._plans[A]:
+                            p._fn(*p._fn_args)
+                except Exception, e:
+                    e.args = e.args + ({'plan': p, 'node': p.node},)
+                    raise
 
         if sync_w_theano_shared_vars:
             self.copy_to_shared()  # -- calls queue.finish
@@ -391,6 +400,7 @@ def dimshuffle_a(queue, sim, node):
     Y = Array(queue, data=X.data, dtype=X.dtype,
               shape=Yshape, strides=Ystrides)
     sim.ocl_vars[Yvar] = Y
+
 
 @perform(theano.tensor.elemwise.DimShuffle)
 def dimshuffle_p(queue, sim, node):

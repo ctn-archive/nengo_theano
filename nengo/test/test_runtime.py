@@ -27,24 +27,26 @@ net.connect('A', 'C', func=pow)
 net.connect('A', 'D', func=mult)
 net.connect('D', 'B', func=pow) # throw in some recurrency whynot
 
+approx_time = 1.0 # second
+
 if 0:
     start_time = time.time()
     print "starting simulation (net.run)"
-    net.run(0.5)
+    net.run(approx_time)
     print "runtime: ", time.time() - start_time, "seconds"
 
 if 0:
     sim = Simulator(net)
     start_time = time.time()
     print "starting simulation (Simulator)"
-    sim.run(0.5)
+    sim.run(approx_time)
     print "runtime: ", time.time() - start_time, "seconds"
 
 if 1:
     sim2 = SimulatorOCL(net, profiling=True)
     start_time = time.time()
     print "starting simulation (OCL with profiling)"
-    sim2.run(0.5)
+    sim2.run(approx_time)
     print "runtime: ", time.time() - start_time, "seconds"
     foo = [(t, n) for (n, t) in sim2.t_used.items()]
     foo.sort()
@@ -60,11 +62,11 @@ if 1:
     sim3 = SimulatorOCL(net, profiling=False)
     start_time = time.time()
     print "starting simulation (OCL)"
-    sim3.run(0.5)
+    sim3.run(approx_time)
     print "runtime: ", time.time() - start_time, "seconds"
 
 if 0:
     sim4 = SimulatorOCL(net, profiling=False)
     start_time = time.time()
     print "starting simulation with error detection (OCL)"
-    sim4.run(0.5, run_theano_too=True)
+    sim4.run(approx_time, run_theano_too=True)
