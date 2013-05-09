@@ -24,6 +24,8 @@ class MapGemv(theano.Op):
 
 map_gemv = MapGemv()
 
+simulation_time = theano.shared(np.asarray(0.0, dtype='float32'))
+
 
 class Simulator(object):
     def __init__(self, network):

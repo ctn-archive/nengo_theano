@@ -13,6 +13,7 @@ from . import origin
 from . import input
 from . import subnetwork
 from . import connection
+import simulator
 
 class Network(object):
     def __init__(self, name, seed=None, fixed_seed=None, dt=.001):
@@ -428,7 +429,7 @@ class Network(object):
 
         p = probe.Probe(name=name, target=target, target_name=target_name, 
             dt_sample=dt_sample, **kwargs)
-        self.add(p)
+        self.nodes[name] = p
         return p
             
     def make_theano_tick(self):
@@ -440,6 +441,7 @@ class Network(object):
         # dictionary for all variables
         # and the theano description of how to compute them 
         updates = OrderedDict()
+        updates[simulator.simulation_time] = simulator.simulation_time + self.dt
 
         # for every node in the network
         for node in self.nodes.values():
