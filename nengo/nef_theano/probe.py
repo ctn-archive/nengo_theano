@@ -84,7 +84,8 @@ class Probe(object):
         updates = self.filter.update(dt)
         new_data, new_i = Scribe(False)(self.filter.value,
                                            self.data, self.i,
-                                           simulator.simulation_time, dt)
+                                           simulator.simulation_time,
+                                           self.dt_sample)
         updates[self.data] = new_data
         updates[self.i] = new_i
         return updates

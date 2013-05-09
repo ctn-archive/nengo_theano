@@ -40,15 +40,29 @@ def test_probe():
     print "\nBuild time: %0.10fs" % (build_time_end - build_time_start)
     print "Sim time: %0.10fs" % (sim_time_end - build_time_end)
 
-    # plot the results
+    assert Ip.get_data().shape == (100, 1)
+    assert Ap.get_data().shape == (100, 1)
+    assert Bp.get_data().shape == (100, 1)
+    assert BpSpikes.get_data().shape == (100, 1, 5)
+
+    ip_mse = np.mean((Ip.get_data() - np.sin(t)) ** 2)
+    print 'Ip MSE', ip_mse
+    assert ip_mse < 0.15  # getting .124 May 9 2013
+
+    ap_mse = np.mean((Ap.get_data() - np.sin(t)) ** 2)
+    print 'Ap MSE', ap_mse
+    assert ap_mse < 0.15  # getting .127 May 9 2013
+
     plt.ioff(); plt.close(); 
     plt.subplot(3,1,1)
-    plt.plot(t, Ip.get_data(), 'x'); plt.title('Input')
+    plt.plot(Ip.get_data(), 'x'); plt.title('Input')
+    plt.plot(np.sin(t))
     plt.subplot(3,1,2)
     plt.plot(Ap.get_data()); plt.title('A')
+    plt.plot(np.sin(t))
     plt.subplot(3,1,3); plt.hold(1)
     plt.plot(Bp.get_data())
     for row in BpSpikes.get_data().T: 
         plt.plot(row[0]); 
     plt.title('B')
-    plt.show()
+    plt.close()
