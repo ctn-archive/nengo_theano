@@ -22,6 +22,10 @@ class hPESTermination(LearnedTermination):
     def __init__(self, *args, **kwargs):
         """
         """
+        if kwargs.has_key('supervision_ratio'):
+            self.supervision_rate = kwargs['supervision_ratio']
+            del kwargs['supervision_ratio']
+
         super(hPESTermination, self).__init__(*args, **kwargs)
 
         # get the theano instantaneous spike raster

@@ -93,7 +93,8 @@ def make_TRN(net, name, neurons, dimensions, dim_fb_err, radius=1.5,
         TRN.connect('input_cortex', 'output %d'%d, pstc=1e-6, index_pre=d) 
         # set up thalamic input
         TRN.connect('input_thalamus', 'output %d'%d, pstc=1e-6, 
-            index_pre=d, func=subone) 
+            index_pre=d)#, func=subone) 
+        TRN.connect('output %d'%d, 'output', index_post=d)
     # saturate integrator if there is a strong derivative
     TRN.connect('abs_val_deriv.output', 'integrator', weight=10) 
         
@@ -104,7 +105,6 @@ def make_TRN(net, name, neurons, dimensions, dim_fb_err, radius=1.5,
     for d in range(dimensions):
         TRN.connect('integrator', 'output %d'%d, 
             transform=inhib_matrix1, pstc=tau_inhib)
-        TRN.connect('output %d'%d, 'output', index_post=d)
 
     TRN.connect('input_error', 'abs_error.input')
     # sum error signals
@@ -126,16 +126,18 @@ def test_TRN():
 
     net.make_input('input_cortex', value=[.2, .5, -.3])
     net.make_input('input_thalamus', value=[.5,.6,1])
-    net.make_input('input_error', value=[1, 1])
+    net.make_input('input_error', value=[0, 0])
 
     make_TRN(net, 'TRN', neurons=100, dimensions=3, 
         dim_fb_err=2) #, mode='direct')
 
     net.connect('input_cortex', 'TRN.input_cortex')
-    net.connect('input_thalamus', 'TRN.input_thalamus', weight=2)
+    net.connect('input_thalamus', 'TRN.input_thalamus')#, weight=2)
     net.connect('input_error', 'TRN.input_error')
 
     output_probe = net.make_probe('TRN.output')
+    avout_probe = net.make_probe('TRN.abs_val_deriv.output')
+    int_probe = net.make_probe('TRN.integrator')
 
     build_time = time.time()
     print "build time: ", build_time - start_time
@@ -146,6 +148,10 @@ def test_TRN():
 
     import matplotlib.pyplot as plt
     plt.plot(output_probe.get_data())
+    plt.subplot(312); plt.title('TRN abs val output')
+    plt.plot(avout_probe.get_data()); plt.ylim([-1,1])
+    plt.subplot(313); plt.title('TRN integrator')
+    plt.plot(int_probe.get_data())
     plt.tight_layout()
     plt.show()
 

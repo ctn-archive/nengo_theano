@@ -12,7 +12,7 @@ net = nef.Network('BG Test')
 def func(x):
     return [math.sin(x), .5,.2]
 net.make_input('in', value=func)
-templates.basalganglia.make_basal_ganglia(
+templates.basalganglia.make(
     net=net, name='BG', dimensions=3)
 
 net.connect('in', 'BG.input')
