@@ -24,12 +24,17 @@ class MapGemv(theano.Op):
 
 map_gemv = MapGemv()
 
-simulation_time = theano.shared(np.asarray(0.0, dtype='float32'))
+simulation_time = theano.tensor.fscalar(name='simulation_time')
 
 
 class Simulator(object):
     def __init__(self, network):
         self.network = network
+        self.simulation_steps = 0
+
+        if self.network.tick_nodes:
+            raise ValueError('Simulator does not support',
+                             ' networks with tick_nodes')
 
         # dictionary for all variables
         # and the theano description of how to compute them 
@@ -43,11 +48,14 @@ class Simulator(object):
                 updates.update(node.update(self.network.dt))
 
         # create graph and return optimized update function
-        self.step = theano.function([], [], updates=updates.items())
+        self.step = theano.function([simulation_time], [],
+                                    updates=updates.items())
 
     def run_steps(self, N):
         for i in xrange(N):
-            self.step()
+            simulation_time = self.simulation_steps * self.network.dt
+            self.step(simulation_time)
+            self.simulation_steps += 1
 
 
     def run(self, approx_sim_time):

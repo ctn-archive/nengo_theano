@@ -9,7 +9,7 @@ import time
 
 from .. import nef_theano as nef
 
-def test_probe():
+def test_probe(simcls=None):
 
     build_time_start = time.time()
 
@@ -33,8 +33,12 @@ def test_probe():
 
     build_time_end = time.time()
 
-    print "starting simulation"
-    net.run(timesteps*dt_step)
+    print "Starting simulation"
+    if simcls is None:
+        net.run(timesteps * dt_step)
+    else:
+        sim = simcls(net)
+        sim.run(timesteps * dt_step)
 
     sim_time_end = time.time()
     print "\nBuild time: %0.10fs" % (build_time_end - build_time_start)
@@ -66,3 +70,11 @@ def test_probe():
         plt.plot(row[0]); 
     plt.title('B')
     plt.close()
+
+def test_probe_sim():
+    from nengo.nef_theano import simulator
+    test_probe(simulator.Simulator)
+
+def test_probe_simocl():
+    from nengo.nef_theano import simulator_ocl
+    test_probe(simulator_ocl.SimulatorOCL)

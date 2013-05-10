@@ -9,20 +9,21 @@ TODO
 * use float16 for many things,
 """
 
+import re
+
 from _collections import OrderedDict
 import theano
 import numpy as np
 import pyopencl as cl
 import simulator
 import lif
-
+import probe
 
 from ocl.array import Array, to_device, empty
 from ocl.gemv_batched import plan_map_gemv
 from ocl.elemwise import plan_copy
 from ocl.dot import plan_dot
 from ocl.plan import Plan
-
 
 ocl_perform = {}
 ocl_alloc = {}
@@ -44,6 +45,10 @@ def alloc(op_cls):
     return deco
 
 
+class UnAllocatedOutput(object):
+    """Singleton to stand for an un-allocated output """
+
+
 class SimulatorOCL(object):
     """
     Simulator that uses OpenCL instead of numpy to evaluate the Theano "step"
@@ -54,6 +59,9 @@ class SimulatorOCL(object):
     """
     def __init__(self, network, context=None, profiling=False):
         self.network = network
+        if self.network.tick_nodes:
+            raise ValueError('Simulator does not support',
+                             ' networks with tick_nodes')
         if context is None:
             context = cl.create_some_context()
         self.context = context
@@ -79,7 +87,8 @@ class SimulatorOCL(object):
         # create graph and return optimized update function
         # -- use py linker to avoid wasting time compiling C code
         updates_items = updates.items()
-        self.step = theano.function([], [], updates=updates_items, 
+        self.step = theano.function([simulator.simulation_time], [],
+            updates=updates_items, 
             mode=theano.Mode(
                 optimizer='default',
                 linker=theano.gof.vm.VM_Linker(use_cloop=False, allow_gc=False),
@@ -94,6 +103,13 @@ class SimulatorOCL(object):
         self._ocl_vars = ({}, {})
         self.constant_vars = {}
         self._node_plans = ({}, {})
+        self._probed_vars = ({}, {})
+        self._probed_vals = ({}, {})
+        self._simtime = [
+            cl.array.zeros(self.queue, (), dtype='float32'),
+            cl.array.zeros(self.queue, (), dtype='float32'),
+        ]
+
 
         # -- allocate workspace for the first plan (plan 0)
         self.ocl_vars = self._ocl_vars[0]
@@ -105,6 +121,8 @@ class SimulatorOCL(object):
                     continue
                 if hasattr(vv, 'data'):
                     self.constant_vars[vv] = vv.data
+                elif vv.name == 'simulation_time':
+                    self._ocl_vars[0][vv] = self._simtime[0]
                 elif vv.owner is None:
                     val = vv.get_value(borrow=True)
                     self._ocl_vars[0][vv] = to_device(self.queue, val)
@@ -112,14 +130,28 @@ class SimulatorOCL(object):
             ocl_alloc[type(node.op)](self.queue, self, node)
             for vout in node.outputs:
                 if vout in self._ocl_vars[0]:
-                    assert self._ocl_vars[0][vout].ndim == vout.ndim, node.op
-                    assert self._ocl_vars[0][vout].dtype == vout.dtype, node.op
+                    if self._ocl_vars[0][vout] is not UnAllocatedOutput:
+                        assert self._ocl_vars[0][vout].ndim == vout.ndim, node.op
+                        assert self._ocl_vars[0][vout].dtype == vout.dtype, node.op
                 else:
                     assert vout in self.constant_vars
 
         # -- set up the outputs from plan 0 as the inputs for plan 1
         # -- and the outputs from plan 1 as the inputs for plan 0
         for (ivar, ovar) in self.step.fn.updated_vars.items():
+            if ovar not in self._ocl_vars[0]:
+                # -- this can happen if `ovar` is not
+                #    implicated in any computation except
+                #    the updating of this variable
+                #    and perhaps being updated itself.
+                assert ovar.owner is None
+                if hasattr(vv, 'data'):
+                    self.constant_vars[ovar] = ovar.data
+                    raise NotImplementedError('copy const into ocl ivar')
+                else:
+                    val = ovar.get_value(borrow=True)
+                    self._ocl_vars[0][ovar] = to_device(self.queue, val)
+                    self.queue.finish()
             self._ocl_vars[1][ivar] = self._ocl_vars[0][ovar]
             if ivar not in self._ocl_vars[0]:
                 # -- if ivar is not an input to anything, then this is the
@@ -139,7 +171,9 @@ class SimulatorOCL(object):
                 if vv in self.constant_vars:
                     continue
                 assert not hasattr(vv, 'data')
-                if vv.owner is None:
+                if vv.name == 'simulation_time':
+                    self._ocl_vars[1][vv] = self._simtime[1]
+                elif vv.owner is None:
                     # -- vv is a shared var that isn't updated
                     self._ocl_vars[1][vv] = self._ocl_vars[0][vv]
             if any(vv not in self.ocl_vars for vv in node.outputs):
@@ -156,6 +190,8 @@ class SimulatorOCL(object):
         # -- build plans for evaluating ocl_vals[0]
         for node in self.nodes:
             self.ocl_vars = self._ocl_vars[0]
+            self.probed_vars = self._probed_vars[0]
+            self.probed_vals = self._probed_vals[0]
             plans = ocl_perform[type(node.op)](self.queue, self, node)
             for plan in plans:
                 plan.node = node
@@ -165,12 +201,17 @@ class SimulatorOCL(object):
         # -- build plans for evaluating ocl_vals[0]
         for node in self.nodes:
             self.ocl_vars = self._ocl_vars[1]
+            self.ocl_vars = self._ocl_vars[1]
+            self.probed_vars = self._probed_vars[1]
+            self.probed_vals = self._probed_vals[1]
             plans = ocl_perform[type(node.op)](self.queue, self, node)
             for plan in plans:
                 plan.node = node
             self._plans[1].extend(plans)
             self._node_plans[1][node] = plans
         del self.ocl_vars
+        del self.probed_vars
+        del self.probed_vals
         self.queue.finish()
 
 
@@ -178,14 +219,23 @@ class SimulatorOCL(object):
         """
         Copy data from the theano graph's shared variables into self.ocl_vars
         """
+
         ocl_vars = self._ocl_vars[self.n_steps % 2]
+        probed_vals = self._probed_vals[self.n_steps % 2]
         for (ivar, ovar) in self.step.fn.updated_vars.items():
-            try:
-                nparray = ocl_vars[ivar].get(self.queue)
-            except AssertionError:
-                print ocl_vars[ivar].structure
-                raise
-            ivar.set_value(nparray, borrow=True)
+            if ocl_vars[ivar] is UnAllocatedOutput:
+                if ovar.owner and isinstance(ovar.owner.op, probe.Scribe):
+                    x = ovar.owner.inputs[0]
+                    last_update, vals = probed_vals[x]
+                    ovar.owner.inputs[1].set_value(vals)
+                    ovar.owner.inputs[2].set_value(len(vals))
+            else:
+                try:
+                    nparray = ocl_vars[ivar].get(self.queue)
+                except AssertionError:
+                    print ocl_vars[ivar].structure
+                    raise
+                ivar.set_value(nparray, borrow=True)
         self.queue.finish()
 
     def copy_from_shared(self):
@@ -304,15 +354,29 @@ class SimulatorOCL(object):
                 kerns = [p._enqueue_args[1] for p in plans]
                 gsize = [p._enqueue_args[2] for p in plans]
                 lsize = [p._enqueue_args[3] for p in plans]
+                dt = self.network.dt
                 try:
-                    [map(cl.enqueue_nd_range_kernel,
-                                queues, kerns, gsize, lsize)
-                        for i in xrange(N2)]
+                    for i in xrange(N2):
+                        simtime = (self.n_steps + i) * dt
+                        self._simtime[A] = simtime
+                        self._simtime[B] = simtime + dt 
+                        map(cl.enqueue_nd_range_kernel,
+                            queues, kerns, gsize, lsize)
+                        for vv, scribe_dt in self._probed_vars[A].items():
+                            last_update, vals = self._probed_vals[A][vv]
+                            if simtime - last_update > scribe_dt:
+                                vals.append(self._ocl_vars[A][vv].get())
+                                last_update = simtime
+                            self._probed_vals[A][vv] = last_update, vals
+                        for vv, scribe_dt in self._probed_vars[B].items():
+                            last_update, vals = self._probed_vals[B][vv]
+                            if simtime - last_update > scribe_dt:
+                                vals.append(self._ocl_vars[B][vv].get())
+                                last_update = simtime
+                            self._probed_vals[B][vv] = last_update, vals
                     self.n_steps += N2 * 2
                     if N % 2:
-                        self.n_steps += 1
-                        for p in self._plans[A]:
-                            p._fn(*p._fn_args)
+                        raise NotImplementedError()
                 except Exception, e:
                     e.args = e.args + ({'plan': p, 'node': p.node},)
                     raise
@@ -734,13 +798,14 @@ def elemwise_p(queue, sim, node):
         else:
             c_body_inputs[ivar] = str(float(sim.constant_vars[ivar]))
 
+    scalar_inputs = [theano.scalar.Scalar(dtype=vv.dtype)()
+                     for vv in node.inputs]
     ctype_body = node.op.scalar_op.c_code(
-        None,
+        node.op.scalar_op(*scalar_inputs).owner,
         'name',
         [c_body_inputs[vv] for vv in node.inputs],
         [c_body_inputs[vv] for vv in node.outputs],
         {})
-    import re
 
     # -- replace the numpy typedefs
     ctype_body = re.sub('npy_float64', 'double', ctype_body)
@@ -784,4 +849,36 @@ def elemwise_p(queue, sim, node):
         for inum, ivar in enumerate(node.inputs + node.outputs)
         if ivar in sim.ocl_vars])
     return [Plan(locals())]
+
+@alloc(theano.tensor.Rebroadcast)
+def rebroadcast_a(queue, sim, node):
+    sim.ocl_vars[node.outputs[0]] = sim.ocl_vars[node.inputs[0]]
+
+@perform(theano.tensor.Rebroadcast)
+def rebroadcast_p(queue, sim, node):
+    return []
+
+
+@alloc(probe.Scribe)
+def scribe_a(queue, sim, node):
+    x, buf, i, t, dt_sample = node.inputs
+    #new_buf = sim.ocl_vars[buf].empty_like()
+    new_i = sim.ocl_vars[i].empty_like()
+    assert len(node.outputs) == 2
+    sim.ocl_vars[node.outputs[0]] = UnAllocatedOutput
+    sim.ocl_vars[node.outputs[1]] = UnAllocatedOutput
+
+@perform(probe.Scribe)
+def scribe_p(queue, sim, node):
+    # Scribes are handled specially by the simulator
+    # because generally, the simulator does not permit the size of Array
+    # objects to change during simulation.
+    # Scribe ops are a necessary violation of that general rule.
+
+    # XXX Schedule the probes to run less often than the main simulator
+    #     clock, if the dt_sample is sufficiently large
+    dt_sample = float(sim.constant_vars[node.inputs[-1]])
+    sim.probed_vars[node.inputs[0]] = dt_sample
+    sim.probed_vals[node.inputs[0]] = [0, []]
+    return []
 
