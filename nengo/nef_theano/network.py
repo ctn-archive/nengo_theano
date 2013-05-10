@@ -1,5 +1,5 @@
 import random
-import collections
+from _collections import OrderedDict
 import quantities
 
 import theano
@@ -13,6 +13,7 @@ from . import origin
 from . import input
 from . import subnetwork
 from . import connection
+import simulator
 
 class Network(object):
     def __init__(self, name, seed=None, fixed_seed=None, dt=.001):
@@ -381,11 +382,19 @@ class Network(object):
             name=name, neurons=neurons, dimensions=dimensions,
             array_size=array_size, **kwargs)
     
-    def make_input(self, *args, **kwargs): 
+    def make_input(self, name, value, zero_after_time=None): 
         """Create an input and add it to the network."""
-        i = input.Input(*args, **kwargs)
-        self.add(i)
-        return i
+        if zero_after_time:
+            node = input.Input(name, value, zero_after_time)
+            self.add(node)
+        else:
+            if callable(value):
+                node = input.ScalarFunctionOfTime(name, func=value)
+                self.nodes[node.name] = node
+            else:
+                node = input.Input(name, value, zero_after_time)
+                self.add(node)
+        return node
         
     def make_subnetwork(self, name):
         """Create a subnetwork.  This has no functional purpose other than
@@ -428,7 +437,7 @@ class Network(object):
 
         p = probe.Probe(name=name, target=target, target_name=target_name, 
             dt_sample=dt_sample, **kwargs)
-        self.add(p)
+        self.nodes[name] = p
         return p
             
     def make_theano_tick(self):
@@ -439,7 +448,7 @@ class Network(object):
 
         # dictionary for all variables
         # and the theano description of how to compute them 
-        updates = collections.OrderedDict()
+        updates = OrderedDict()
 
         # for every node in the network
         for node in self.nodes.values():
@@ -449,7 +458,8 @@ class Network(object):
                 updates.update(node.update(self.dt))
 
         # create graph and return optimized update function
-        return theano.function([], [], updates=updates)
+        return theano.function([simulator.simulation_time], [],
+                               updates=updates.items())
 
     def run(self, time):
         """Run the simulation.
@@ -474,10 +484,10 @@ class Network(object):
                 node.theano_tick()
 
             # run the theano nodes
-            self.theano_tick()    
+            self.theano_tick(t)
 
         # update run_time variable
-        self.run_time += time
+        self.run_time = t
 
     def write_data_to_hdf5(self, filename='data'):
         """This is a function to call after simulation that writes the 

@@ -41,7 +41,7 @@ def accumulate(J, neurons, dt, time=1.0, init_time=0.05):
     updates[total] = total + neurons.output
 
     # create theano function that does it all
-    accumulate_spikes = theano.function([], [], updates=updates)
+    accumulate_spikes = theano.function([], [], updates=updates.items())
     #, mode=theano.Mode(optimizer=None, linker='py'))
 
     # call the standard one a few times to avoid startup transients

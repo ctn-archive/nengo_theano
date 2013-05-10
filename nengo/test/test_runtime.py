@@ -3,9 +3,11 @@
 import math
 import time
 
-from .. import nef_theano as nef
+from nengo import nef_theano as nef
+from nengo.nef_theano.simulator import Simulator
+from nengo.nef_theano.simulator_ocl import SimulatorOCL
 
-net=nef.Network('Runtime Test')
+net=nef.Network('Runtime Test', seed=123)
 net.make_input('in', value=math.sin)
 net.make('A', 1000, 1)
 net.make('B', 1000, 1)
@@ -25,9 +27,46 @@ net.connect('A', 'C', func=pow)
 net.connect('A', 'D', func=mult)
 net.connect('D', 'B', func=pow) # throw in some recurrency whynot
 
-timesteps = 5000 # running for timesteps * .1 seconds
-start_time = time.time()
-print "starting simulation"
-for i in range(timesteps):
-    net.run(0.1)
-print "runtime: ", time.time() - start_time, "seconds"
+approx_time = 1.0 # second
+
+if 0:
+    start_time = time.time()
+    print "starting simulation (net.run)"
+    net.run(approx_time)
+    print "runtime: ", time.time() - start_time, "seconds"
+
+if 0:
+    sim = Simulator(net)
+    start_time = time.time()
+    print "starting simulation (Simulator)"
+    sim.run(approx_time)
+    print "runtime: ", time.time() - start_time, "seconds"
+
+if 1:
+    sim2 = SimulatorOCL(net, profiling=True)
+    start_time = time.time()
+    print "starting simulation (OCL with profiling)"
+    sim2.run(approx_time)
+    print "runtime: ", time.time() - start_time, "seconds"
+    foo = [(t, n) for (n, t) in sim2.t_used.items()]
+    foo.sort()
+    foo.reverse()
+    t_total = 0
+    for t, n in foo:
+        print t * 1e-9, n
+        t_total += t * 1e-9
+    print 'total time in OCL:', t_total
+
+
+if 1:
+    sim3 = SimulatorOCL(net, profiling=False)
+    start_time = time.time()
+    print "starting simulation (OCL)"
+    sim3.run(approx_time)
+    print "runtime: ", time.time() - start_time, "seconds"
+
+if 0:
+    sim4 = SimulatorOCL(net, profiling=False)
+    start_time = time.time()
+    print "starting simulation with error detection (OCL)"
+    sim4.run(approx_time, run_theano_too=True)

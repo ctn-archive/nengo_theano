@@ -2,7 +2,7 @@ import theano
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 from theano import tensor as TT
 import numpy as np
-import collections
+from _collections import OrderedDict
 
 from . import neuron
 from . import ensemble_origin
@@ -10,6 +10,7 @@ from . import origin
 from . import cache
 from . import filter
 from .hPES_termination import hPESTermination
+from .simulator import map_gemv
 
 class Ensemble:
     """An ensemble is a collection of neurons representing a vector space.
@@ -348,13 +349,17 @@ class Ensemble:
         ### find the total input current to this population of neurons
 
         # set up matrix to store accumulated decoded input
-        X = np.zeros((self.array_size, self.dimensions))
+        X = None 
         # updates is an ordered dictionary of theano variables to update
-        updates = collections.OrderedDict()
-    
-        for di in self.decoded_input.values(): 
+        updates = OrderedDict()
+
+        for ii, di in enumerate(self.decoded_input.values()):
             # add its values to the total decoded input
-            X += di.value 
+            if ii == 0:
+                X = di.value
+            else:
+                X += di.value
+
             updates.update(di.update(dt))
 
         # if we're in spiking mode, then look at the input current and 
@@ -370,12 +375,10 @@ class Ensemble:
                 updates.update(ei.update(dt))
 
             # only do this if there is decoded_input
-            if len(self.decoded_input) > 0:
+            if X is not None:
                 # add to input current for each neuron as
                 # represented input signal x preferred direction
-                for i in range(self.array_size):
-                    J = TT.inc_subtensor(J[i],
-                       TT.dot(self.shared_encoders[i], X[i].T))
+                J = map_gemv(1.0, self.shared_encoders, X, 1.0, J)
 
             # if noise has been specified for this neuron,
             if self.noise: 
@@ -411,6 +414,6 @@ class Ensemble:
             for o in self.origin.values(): 
                 if o.func is None:
                     if len(self.decoded_input) > 0:
-                        updates.update(collections.OrderedDict({o.decoded_output: 
+                        updates.update(OrderedDict({o.decoded_output: 
                             TT.flatten(X).astype('float32')}))
         return updates

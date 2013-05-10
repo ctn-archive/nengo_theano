@@ -1,4 +1,4 @@
-import collections
+from _collections import OrderedDict
 
 import theano
 from theano import tensor as TT
@@ -53,7 +53,7 @@ class LIFRateNeuron(neuron.Neuron):
         rate = TT.switch(input_current > 1, 1 / rate, 0)
 
         # return dictionary of internal variables to update
-        return collections.OrderedDict({
+        return OrderedDict({
                 self.output: TT.unbroadcast(rate.astype('float32'), 0)
                 })
 
