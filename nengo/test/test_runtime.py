@@ -5,7 +5,10 @@ import time
 
 from nengo import nef_theano as nef
 from nengo.nef_theano.simulator import Simulator
-from nengo.nef_theano.simulator_ocl import SimulatorOCL
+try:
+    from nengo.nef_theano.simulator_ocl import SimulatorOCL
+except ImportError:
+    pass
 
 net=nef.Network('Runtime Test', seed=123)
 net.make_input('in', value=math.sin)
@@ -29,20 +32,20 @@ net.connect('D', 'B', func=pow) # throw in some recurrency whynot
 
 approx_time = 1.0 # second
 
-if 0:
+if 1:
     start_time = time.time()
     print "starting simulation (net.run)"
     net.run(approx_time)
     print "runtime: ", time.time() - start_time, "seconds"
 
-if 0:
+if 1:
     sim = Simulator(net)
     start_time = time.time()
     print "starting simulation (Simulator)"
     sim.run(approx_time)
     print "runtime: ", time.time() - start_time, "seconds"
 
-if 1:
+if 1 and 'SimulatorOCL' in globals():
     sim2 = SimulatorOCL(net, profiling=True)
     start_time = time.time()
     print "starting simulation (OCL with profiling)"
@@ -58,14 +61,14 @@ if 1:
     print 'total time in OCL:', t_total
 
 
-if 1:
+if 1 and 'SimulatorOCL' in globals():
     sim3 = SimulatorOCL(net, profiling=False)
     start_time = time.time()
     print "starting simulation (OCL)"
     sim3.run(approx_time)
     print "runtime: ", time.time() - start_time, "seconds"
 
-if 0:
+if 1 and 'SimulatorOCL' in globals():
     sim4 = SimulatorOCL(net, profiling=False)
     start_time = time.time()
     print "starting simulation with error detection (OCL)"
