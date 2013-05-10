@@ -1,1 +1,2 @@
 import basalganglia
+import thalamus

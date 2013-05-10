@@ -1,8 +1,10 @@
-def make_basal_ganglia(net, name='Basal Ganglia', dimensions=1, neurons=100, 
+def make(net, name='Basal Ganglia', dimensions=1, neurons=100, 
                        tau_ampa=0.002, tau_gaba=0.008, output_weight=1, 
                        radius=1.5):
     """This function creates a subnetwork with a model of the basal ganglia
     based off the paper (Gurney, Prescott, & Redgrave, 2001)
+    NOTE: To match the basal ganglia template from Java Nengo, set pstc=.01
+          on connection to input ensemble.
     
     :param NetWork net:
     :param string name:
@@ -18,9 +20,7 @@ def make_basal_ganglia(net, name='Basal Ganglia', dimensions=1, neurons=100,
 
     netbg = net.make_subnetwork(name)
 
-    #TODO: make direct mode, implement with 1 neuron in direct mode
     netbg.make('input', neurons=1, dimensions=dimensions, mode='direct')
-    #TODO: make direct mode, implement with 1 neuron in direct mode
     netbg.make('output', neurons=1, dimensions=dimensions, mode='direct')
 
     # connection weights from (Gurney, Prescott, & Redgrave, 2001)
@@ -80,3 +80,40 @@ def make_basal_ganglia(net, name='Basal Ganglia', dimensions=1, neurons=100,
         return mg*(x[0]-eg)
     netbg.connect('GPi', 'output', func=func_gpi, pstc=tau_gaba, 
         weight=output_weight)
+
+def test_basalganglia():
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import math
+
+    from .. import nef_theano as nef
+    from .. import templates
+
+    net = nef.Network('BG Test')
+    def func(x):
+        return [math.sin(x), .5,.2]
+    net.make_input('in', value=func)
+    templates.basalganglia.make(net=net, name='BG', 
+        neurons=300, dimensions=3)
+
+    net.connect('in', 'BG.input', pstc=.01)
+
+    timesteps = 1000
+    dt_step = 0.01
+    t = np.linspace(dt_step, timesteps*dt_step, timesteps)
+    pstc = 0.01
+
+    Ip = net.make_probe('in', dt_sample=dt_step, pstc=pstc)
+    BGp = net.make_probe('BG.output', dt_sample=dt_step, pstc=pstc)
+
+    print "starting simulation"
+    net.run(timesteps*dt_step)
+
+    # plot the results
+    plt.ioff(); plt.close(); 
+    plt.subplot(2,1,1)
+    plt.plot(t, Ip.get_data(), 'x'); plt.title('Input')
+    plt.subplot(2,1,2)
+    plt.plot(BGp.get_data()); plt.title('BG.output')
+    plt.tight_layout()
+    plt.show()

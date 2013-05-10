@@ -30,7 +30,7 @@ net.make('B3', neurons=neurons, dimensions=dimensions, array_size=array_size) # 
 net.make('B4', neurons=neurons, dimensions=dimensions, array_size=array_size) # for test 4
 
 # setup inhibitory scaling matrix
-inhib_matrix_1 = [[-10] * dimensions] * neurons # for test 1 and 2
+inhib_matrix_1 = [[-1] * dimensions] * neurons # for test 1 and 2
 inhib_matrix_2 = [[[0] * dimensions] * neurons]  # for test 3 
 inhib_matrix_2.extend([[[0] * dimensions] * neurons])  # for test 3 
 inhib_matrix_2.extend([[[-10] * dimensions] * neurons])  # for test 3 
@@ -42,7 +42,7 @@ net.connect('in2', 'B', index_pre=0)
 net.connect('in2', 'B2')
 net.connect('in2', 'B3')
 net.connect('in2', 'B4')
-net.connect('A', 'B', transform=inhib_matrix_1) # for test 1
+net.connect('A', 'B', transform=inhib_matrix_1, pstc=.1) # for test 1
 net.connect('A', 'B2', transform=inhib_matrix_1) # for test 2
 net.connect('A', 'B3', transform=inhib_matrix_2) # for test 3
 net.connect('A', 'B4', transform=inhib_matrix_3) # for test 4
