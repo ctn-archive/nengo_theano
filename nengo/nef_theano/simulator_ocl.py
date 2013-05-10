@@ -103,8 +103,7 @@ class SimulatorOCL(object):
         self._ocl_vars = ({}, {})
         self.constant_vars = {}
         self._node_plans = ({}, {})
-        self._probed_vars = ({}, {})
-        self._probed_vals = ({}, {})
+        self._scribe_buf = {}
         self._simtime = [
             cl.array.zeros(self.queue, (), dtype='float32'),
             cl.array.zeros(self.queue, (), dtype='float32'),
@@ -130,9 +129,8 @@ class SimulatorOCL(object):
             ocl_alloc[type(node.op)](self.queue, self, node)
             for vout in node.outputs:
                 if vout in self._ocl_vars[0]:
-                    if self._ocl_vars[0][vout] is not UnAllocatedOutput:
-                        assert self._ocl_vars[0][vout].ndim == vout.ndim, node.op
-                        assert self._ocl_vars[0][vout].dtype == vout.dtype, node.op
+                    assert self._ocl_vars[0][vout].ndim == vout.ndim, node.op
+                    assert self._ocl_vars[0][vout].dtype == vout.dtype, node.op
                 else:
                     assert vout in self.constant_vars
 
@@ -190,8 +188,6 @@ class SimulatorOCL(object):
         # -- build plans for evaluating ocl_vals[0]
         for node in self.nodes:
             self.ocl_vars = self._ocl_vars[0]
-            self.probed_vars = self._probed_vars[0]
-            self.probed_vals = self._probed_vals[0]
             plans = ocl_perform[type(node.op)](self.queue, self, node)
             for plan in plans:
                 plan.node = node
@@ -202,16 +198,12 @@ class SimulatorOCL(object):
         for node in self.nodes:
             self.ocl_vars = self._ocl_vars[1]
             self.ocl_vars = self._ocl_vars[1]
-            self.probed_vars = self._probed_vars[1]
-            self.probed_vals = self._probed_vals[1]
             plans = ocl_perform[type(node.op)](self.queue, self, node)
             for plan in plans:
                 plan.node = node
             self._plans[1].extend(plans)
             self._node_plans[1][node] = plans
         del self.ocl_vars
-        del self.probed_vars
-        del self.probed_vals
         self.queue.finish()
 
 
@@ -221,21 +213,13 @@ class SimulatorOCL(object):
         """
 
         ocl_vars = self._ocl_vars[self.n_steps % 2]
-        probed_vals = self._probed_vals[self.n_steps % 2]
         for (ivar, ovar) in self.step.fn.updated_vars.items():
-            if ocl_vars[ivar] is UnAllocatedOutput:
-                if ovar.owner and isinstance(ovar.owner.op, probe.Scribe):
-                    x = ovar.owner.inputs[0]
-                    last_update, vals = probed_vals[x]
-                    ovar.owner.inputs[1].set_value(vals)
-                    ovar.owner.inputs[2].set_value(len(vals))
-            else:
-                try:
-                    nparray = ocl_vars[ivar].get(self.queue)
-                except AssertionError:
-                    print ocl_vars[ivar].structure
-                    raise
-                ivar.set_value(nparray, borrow=True)
+            try:
+                nparray = ocl_vars[ivar].get(self.queue)
+            except AssertionError:
+                print ocl_vars[ivar].structure
+                raise
+            ivar.set_value(nparray, borrow=True)
         self.queue.finish()
 
     def copy_from_shared(self):
@@ -250,6 +234,72 @@ class SimulatorOCL(object):
             ocl_vars[ivar].set(nparray, self.queue)
         self.queue.finish()
 
+    def run_steps_with_theano(self, N):
+        storage_map = self.step.fn.storage_map
+        for i in xrange(N):
+            self.n_steps += 1
+            ocl_vars = self._ocl_vars[self.n_steps % 2]
+            node_plans = self._node_plans[self.n_steps % 2]
+            for jj, (node, thunk) in enumerate(
+                    zip(self.step.fn.nodes, self.step.fn.thunks)):
+
+                def any_inaccuracy(msg, theano_vars):
+                    inaccuracy = False
+                    seen = set()
+                    for ovar in theano_vars:
+                        if ovar in seen:
+                            continue
+                        if ovar in ocl_vars:
+                            refval = storage_map[ovar][0]
+                            try:
+                                oclval = ocl_vars[ovar].get()
+                            except (AssertionError, ValueError):
+                                print ocl_vars[ovar].structure
+                                raise
+                            assert refval.dtype == oclval.dtype
+                            assert refval.shape == oclval.shape
+                            if not np.allclose(refval, oclval,
+                                               atol=1e-4, rtol=1e-4):
+                                print msg, self.n_steps, 'Node', node, 'messed up', ovar
+                                print '  stats', refval.max(), refval.min(), refval.mean(),
+                                print 'vs', oclval.max(), oclval.min(), oclval.mean()
+                                print '  diff abs', np.max(abs(refval - oclval)),
+                                print 'rel', np.max(abs(refval - oclval) / abs(refval + oclval + 1e-12))
+                                inaccuracy=True
+                        seen.add(ovar)
+                    return inaccuracy
+
+                if any_inaccuracy('pre', node.inputs):
+                    raise RuntimeError('Inaccurate computations')
+
+                # -- run the theano thunk
+                thunk()
+
+                # -- run the ocl equivalent
+                for p in node_plans[node]:
+                    p._fn(*p._fn_args)
+                self.queue.finish()
+
+                vars_that_should_match = node.inputs + node.outputs
+                for opos, iposlist in getattr(node.op, 'destroy_map', {}).items():
+                    for ipos in reversed(sorted(iposlist)):
+                        vars_that_should_match.pop(ipos)
+                if any_inaccuracy('post', vars_that_should_match):
+                    print node_plans[node]
+                    print p._fn
+                    print p.text
+                    print p._fn_args
+                    print vars_that_should_match
+                    print [ocl_vars[vv].data for vv in node.inputs if vv in ocl_vars]
+                    print [ocl_vars[vv].data for vv in node.outputs]
+                    raise RuntimeError('Inaccurate computations')
+                else:
+                    print '.',
+            print 'done pass', self.n_steps
+            # -- apply updates to theano fn
+            for (ivar, ovar) in self.step.fn.updated_vars.items():
+                storage_map[ivar][0] = storage_map[ovar][0]
+
     def run_steps(self, N, sync_w_theano_shared_vars=True,
                   run_theano_too=False):
         """
@@ -258,128 +308,56 @@ class SimulatorOCL(object):
         if sync_w_theano_shared_vars and self.n_steps > -1:
             self.copy_from_shared()
 
-        if 0:
-          for ivar in self._ocl_vars[0]:
-            print ivar, self._ocl_vars[0][ivar].get().max(),
-            print self._ocl_vars[1][ivar].get().max()
-            if self.step.fn.storage_map[ivar][0] is not None:
-                print '  ---> ', self.step.fn.storage_map[ivar][0].max()
+        dt = self.network.dt
 
-
-        if run_theano_too:
-            storage_map = self.step.fn.storage_map
+        if self.profiling:
             for i in xrange(N):
                 self.n_steps += 1
-                ocl_vars = self._ocl_vars[self.n_steps % 2]
-                node_plans = self._node_plans[self.n_steps % 2]
-                for jj, (node, thunk) in enumerate(
-                        zip(self.step.fn.nodes, self.step.fn.thunks)):
-
-                    def any_inaccuracy(msg, theano_vars):
-                        inaccuracy = False
-                        seen = set()
-                        for ovar in theano_vars:
-                            if ovar in seen:
-                                continue
-                            if ovar in ocl_vars:
-                                refval = storage_map[ovar][0]
-                                try:
-                                    oclval = ocl_vars[ovar].get()
-                                except (AssertionError, ValueError):
-                                    print ocl_vars[ovar].structure
-                                    raise
-                                assert refval.dtype == oclval.dtype
-                                assert refval.shape == oclval.shape
-                                if not np.allclose(refval, oclval,
-                                                   atol=1e-4, rtol=1e-4):
-                                    print msg, self.n_steps, 'Node', node, 'messed up', ovar
-                                    print '  stats', refval.max(), refval.min(), refval.mean(),
-                                    print 'vs', oclval.max(), oclval.min(), oclval.mean()
-                                    print '  diff abs', np.max(abs(refval - oclval)),
-                                    print 'rel', np.max(abs(refval - oclval) / abs(refval + oclval + 1e-12))
-                                    inaccuracy=True
-                            seen.add(ovar)
-                        return inaccuracy
-
-                    if any_inaccuracy('pre', node.inputs):
-                        raise RuntimeError('Inaccurate computations')
-
-                    # -- run the theano thunk
-                    thunk()
-
-                    # -- run the ocl equivalent
-                    for p in node_plans[node]:
-                        p._fn(*p._fn_args)
-                    self.queue.finish()
-
-                    vars_that_should_match = node.inputs + node.outputs
-                    for opos, iposlist in getattr(node.op, 'destroy_map', {}).items():
-                        for ipos in reversed(sorted(iposlist)):
-                            vars_that_should_match.pop(ipos)
-                    if any_inaccuracy('post', vars_that_should_match):
-                        print node_plans[node]
-                        print p._fn
-                        print p.text
-                        print p._fn_args
-                        print vars_that_should_match
-                        print [ocl_vars[vv].data for vv in node.inputs if vv in ocl_vars]
-                        print [ocl_vars[vv].data for vv in node.outputs]
-                        raise RuntimeError('Inaccurate computations')
-                    else:
-                        print '.',
-                print 'done pass', self.n_steps
-                # -- apply updates to theano fn
-                for (ivar, ovar) in self.step.fn.updated_vars.items():
-                    storage_map[ivar][0] = storage_map[ovar][0]
-
+                evs = []
+                plans = self._plans[self.n_steps % 2]
+                self._simtime[self.n_steps % 2].set(
+                    np.asarray((self.n_steps + i * 2) * dt, dtype='float32'),
+                    queue=self.queue)
+                for p in plans:
+                    evs.append(p._fn(*p._fn_args))
+                self.queue.finish()
+                assert len(evs) == len(plans)
+                for e, p in zip(evs, plans):
+                    self.t_used.setdefault(p.node, 0)
+                    self.t_used[p.node] +=  e.profile.end - e.profile.start
         else:
-            if self.profiling:
-                for i in xrange(N):
-                    self.n_steps += 1
-                    evs = []
-                    plans = self._plans[self.n_steps % 2]
-                    for p in plans:
-                        evs.append(p._fn(*p._fn_args))
-                    self.queue.finish()
-                    assert len(evs) == len(plans)
-                    for e, p in zip(evs, plans):
-                        self.t_used.setdefault(p.node, 0)
-                        self.t_used[p.node] +=  e.profile.end - e.profile.start
-            else:
-                N2 = N // 2
-                A = (self.n_steps + 1) % 2
-                B = (self.n_steps + 2) % 2
-                plans = self._plans[A] + self._plans[B]
-                queues = [p._enqueue_args[0] for p in plans]
-                kerns = [p._enqueue_args[1] for p in plans]
-                gsize = [p._enqueue_args[2] for p in plans]
-                lsize = [p._enqueue_args[3] for p in plans]
-                dt = self.network.dt
-                try:
-                    for i in xrange(N2):
-                        simtime = (self.n_steps + i) * dt
-                        self._simtime[A] = simtime
-                        self._simtime[B] = simtime + dt 
-                        map(cl.enqueue_nd_range_kernel,
-                            queues, kerns, gsize, lsize)
-                        for vv, scribe_dt in self._probed_vars[A].items():
-                            last_update, vals = self._probed_vals[A][vv]
-                            if simtime - last_update > scribe_dt:
-                                vals.append(self._ocl_vars[A][vv].get())
-                                last_update = simtime
-                            self._probed_vals[A][vv] = last_update, vals
-                        for vv, scribe_dt in self._probed_vars[B].items():
-                            last_update, vals = self._probed_vals[B][vv]
-                            if simtime - last_update > scribe_dt:
-                                vals.append(self._ocl_vars[B][vv].get())
-                                last_update = simtime
-                            self._probed_vals[B][vv] = last_update, vals
-                    self.n_steps += N2 * 2
-                    if N % 2:
-                        raise NotImplementedError()
-                except Exception, e:
-                    e.args = e.args + ({'plan': p, 'node': p.node},)
-                    raise
+            N2 = N // 2
+            A = (self.n_steps + 1) % 2
+            B = (self.n_steps + 2) % 2
+            plans = self._plans[A] + self._plans[B]
+            queues = [p._enqueue_args[0] for p in plans]
+            kerns = [p._enqueue_args[1] for p in plans]
+            gsize = [p._enqueue_args[2] for p in plans]
+            lsize = [p._enqueue_args[3] for p in plans]
+            try:
+                # XXX Only loop for as many times as we have
+                # room in the scribe_buf buffers... otherwise
+                # the scribe_p kernel will segfault.
+                # Then reallocate those buffers, update the pointers
+                # of the scribe_p kernel_args, and continue
+                # XXX Also update any other kernel_args that are pointing
+                # to those buffers.
+                for i in xrange(N2):
+                    simtime = (self.n_steps + i * 2) * dt
+                    self._simtime[A].set(
+                        np.asarray(simtime, dtype='float32'),
+                        queue=self.queue)
+                    self._simtime[B].set(
+                        np.asarray(simtime + dt, dtype='float32'),
+                        queue=self.queue)
+                    map(cl.enqueue_nd_range_kernel,
+                        queues, kerns, gsize, lsize)
+                self.n_steps += N2 * 2
+                if N % 2:
+                    raise NotImplementedError('Odd number of steps')
+            except Exception, e:
+                e.args = e.args + ({'plan': p, 'node': p.node},)
+                raise
 
         if sync_w_theano_shared_vars:
             self.copy_to_shared()  # -- calls queue.finish
@@ -576,8 +554,7 @@ def flatten_p(queue, sim, node):
         return [Plan(locals())]
 
     else:
-        print Xval.shape, Yval.shape
-        raise NotImplementedError('Flatten')
+        raise NotImplementedError('Flatten', (Xval.shape, Yval.shape))
 
 @alloc(theano.tensor.basic.Dot)
 def dot_a(queue, sim, node):
@@ -773,7 +750,6 @@ def elemwise_a(queue, sim, node):
 
         sim.ocl_vars[vv] = empty(queue,
                 list(shape), np.dtype(vv.dtype))
-        print shape
 
 @perform(theano.tensor.elemwise.Elemwise)
 def elemwise_p(queue, sim, node):
@@ -862,11 +838,10 @@ def rebroadcast_p(queue, sim, node):
 @alloc(probe.Scribe)
 def scribe_a(queue, sim, node):
     x, buf, i, t, dt_sample = node.inputs
-    #new_buf = sim.ocl_vars[buf].empty_like()
-    new_i = sim.ocl_vars[i].empty_like()
-    assert len(node.outputs) == 2
-    sim.ocl_vars[node.outputs[0]] = UnAllocatedOutput
-    sim.ocl_vars[node.outputs[1]] = UnAllocatedOutput
+    # simulator is in charge of growing scribe buffers
+    sim._scribe_buf[buf] = sim.ocl_vars[buf]
+    sim.ocl_vars[node.outputs[0]] = sim.ocl_vars[buf]
+    sim.ocl_vars[node.outputs[1]] = sim.ocl_vars[i].empty_like()
 
 @perform(probe.Scribe)
 def scribe_p(queue, sim, node):
@@ -875,10 +850,83 @@ def scribe_p(queue, sim, node):
     # objects to change during simulation.
     # Scribe ops are a necessary violation of that general rule.
 
-    # XXX Schedule the probes to run less often than the main simulator
-    #     clock, if the dt_sample is sufficiently large
+    X, buf, i, t, dt_sample = [sim.ocl_vars.get(vv) for vv in node.inputs]
+    obuf, oi, = [sim.ocl_vars[vv] for vv in node.outputs]
+    # dt_sample must be constant
     dt_sample = float(sim.constant_vars[node.inputs[-1]])
-    sim.probed_vars[node.inputs[0]] = dt_sample
-    sim.probed_vals[node.inputs[0]] = [0, []]
-    return []
+
+    def ctype(obj):
+        return cl.tools.dtype_to_ctype(obj.dtype)
+
+    Xtype = ctype(X)
+    itype = ctype(i)
+    ttype = ctype(t)
+    btype = ctype(buf)
+
+    if buf.ndim == 2:
+        Xs0, = X.itemstrides
+        obuf_s0, obuf_s1 = obuf.itemstrides
+        text = """
+            __kernel void foo(
+                __global const %(Xtype)s * X,
+                __global const %(itype)s * i,
+                __global const %(ttype)s * t,
+                __global %(btype)s * obuf,
+                __global %(itype)s * oi
+                         )
+            {
+                const int gid0 = get_global_id(0);
+                int i_samp = (t[0] / %(dt_sample)s);
+                int i0 = i[0];
+                if (i_samp > i0)
+                {
+                    obuf[i_samp * %(obuf_s0)s + gid0 * %(obuf_s1)s]
+                        = X[gid0 * %(Xs0)s];
+                    oi[0] = i_samp;
+                }
+                else
+                {
+                    oi[0] = i0;
+                }
+            }
+            """ % locals()
+    elif buf.ndim == 3:
+        Xs0, Xs1 = X.itemstrides
+        obuf_s0, obuf_s1, obuf_s2 = obuf.itemstrides
+        text = """
+            __kernel void foo(
+                __global const %(Xtype)s * X,
+                __global const %(itype)s * i,
+                __global const %(ttype)s * t,
+                __global %(btype)s * obuf,
+                __global %(itype)s * oi
+                         )
+            {
+                const int gid0 = get_global_id(0);
+                const int gid1 = get_global_id(1);
+
+                int i_samp = (t[0] / %(dt_sample)s);
+                int i0 = i[0];
+                if (i_samp > i0)
+                {
+                    obuf[i_samp * %(obuf_s0)s
+                            + gid0 * %(obuf_s1)s
+                            + gid1 * %(obuf_s2)s]
+                        = X[gid0 * %(Xs0)s + gid1 * %(Xs1)s];
+                    oi[0] = i_samp;
+                }
+                else
+                {
+                    oi[0] = i0;
+                }
+            }
+            """ % locals()
+    else:
+        raise NotImplementedError('buf ndim', buf.ndim)
+
+    _fn = cl.Program(queue.context, text).build().foo
+    _fn_args = (queue, X.shape, None,
+        X.data, i.data, t.data,
+        obuf.data, oi.data)
+    return [Plan(locals())]
 

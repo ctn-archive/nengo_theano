@@ -9,7 +9,7 @@ import time
 
 from .. import nef_theano as nef
 
-def test_probe(simcls=None):
+def test_probe(simcls=None, show=False):
 
     build_time_start = time.time()
 
@@ -44,7 +44,7 @@ def test_probe(simcls=None):
     print "\nBuild time: %0.10fs" % (build_time_end - build_time_start)
     print "Sim time: %0.10fs" % (sim_time_end - build_time_end)
 
-    assert Ip.get_data().shape == (100, 1)
+    assert Ip.get_data().shape == (100, 1), Ip.get_data().shape
     assert Ap.get_data().shape == (100, 1)
     assert Bp.get_data().shape == (100, 1)
     assert BpSpikes.get_data().shape == (100, 1, 5)
@@ -69,7 +69,10 @@ def test_probe(simcls=None):
     for row in BpSpikes.get_data().T: 
         plt.plot(row[0]); 
     plt.title('B')
-    plt.close()
+    if show:
+        plt.show()
+    else:
+        plt.close()
 
 def test_probe_sim():
     from nengo.nef_theano import simulator
