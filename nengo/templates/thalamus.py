@@ -44,12 +44,12 @@ def test_thalamus():
 
     net = nef.Network('Thalamus Test')
     def func(x):
-        return [math.sin(x), .5,.2]
+        return [abs(math.sin(x)), .5, 0]
     net.make_input('in', value=func)
     templates.thalamus.make(net=net, name='Thalamus', 
         neurons=300, dimensions=3, inhib_scale=3)
 
-    net.connect('in', 'Thalamus.input')
+    net.connect('in', 'Thalamus.input', pstc=1e-6)
 
     timesteps = 1000
     dt_step = 0.01
@@ -58,16 +58,19 @@ def test_thalamus():
 
     Ip = net.make_probe('in', dt_sample=dt_step, pstc=pstc)
     Thp = net.make_probe('Thalamus.Thalamus:addOne', dt_sample=dt_step, pstc=pstc)
+    Thp2 = net.make_probe('Thalamus.Thalamus', dt_sample=dt_step, pstc=pstc)
 
     print "starting simulation"
     net.run(timesteps*dt_step)
 
     # plot the results
     plt.ioff(); plt.close(); 
-    plt.subplot(2,1,1)
+    plt.subplot(3,1,1)
     plt.plot(t, Ip.get_data(), 'x'); plt.title('Input')
-    plt.subplot(2,1,2)
+    plt.subplot(3,1,2)
     plt.plot(Thp.get_data()); plt.title('Thalamus.output')
+    plt.subplot(3,1,3)
+    plt.plot(Thp2.get_data()); plt.title('Thalamus.output')
     plt.tight_layout()
     plt.show()
 
