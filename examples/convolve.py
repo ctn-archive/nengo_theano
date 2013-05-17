@@ -1,4 +1,4 @@
-import nef.nef_theano as nef
+import nengo.nef_theano as nef
 import nef.convolution
 import hrr
 

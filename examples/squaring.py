@@ -1,4 +1,4 @@
-import nef.nef_theano as nef
+import nengo.nef_theano as nef
 
 net=nef.Network('Squaring') #Create the network object
 

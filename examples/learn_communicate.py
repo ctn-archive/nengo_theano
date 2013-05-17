@@ -1,7 +1,7 @@
 N=60
 D=1
 
-import nef.nef_theano as nef
+import nengo.nef_theano as nef
 import random
 import math
 

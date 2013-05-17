@@ -1,4 +1,4 @@
-import nef.nef_theano as nef
+import nengo.nef_theano as nef
 
 net=nef.Network('Integrator') #Create the network object
 net.make_input('input',{0.2:5, 0.3:0, 0.44:-10,

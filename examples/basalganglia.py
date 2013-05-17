@@ -1,5 +1,5 @@
-from nef.templates import basalganglia
-import nef.nef_theano as nef
+from nengo.templates import basalganglia
+import nengo.nef_theano as nef
 
 D=5
 net=nef.Network('Basal Ganglia') #Create the network object

@@ -1,4 +1,4 @@
-import nef.nef_theano as nef
+import nengo.nef_theano as nef
 
 speed=10  #Base frequency of oscillation
 tau=0.1   #Recurrent time constant
