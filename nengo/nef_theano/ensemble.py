@@ -10,7 +10,6 @@ from . import origin
 from . import cache
 from . import filter
 from .hPES_termination import hPESTermination
-from .simulator import map_gemv
 
 class Ensemble:
     """An ensemble is a collection of neurons representing a vector space.
@@ -349,17 +348,14 @@ class Ensemble:
         ### find the total input current to this population of neurons
 
         # set up matrix to store accumulated decoded input
-        X = None 
+        X = TT.as_tensor_variable(
+                np.zeros((self.array_size, self.dimensions)).astype('float32'))
         # updates is an ordered dictionary of theano variables to update
         updates = OrderedDict()
-
-        for ii, di in enumerate(self.decoded_input.values()):
+    
+        for di in self.decoded_input.values(): 
             # add its values to the total decoded input
-            if ii == 0:
-                X = di.value
-            else:
-                X += di.value
-
+            X += di.value 
             updates.update(di.update(dt))
 
         # if we're in spiking mode, then look at the input current and 
@@ -375,10 +371,12 @@ class Ensemble:
                 updates.update(ei.update(dt))
 
             # only do this if there is decoded_input
-            if X is not None:
+            if len(self.decoded_input) > 0:
                 # add to input current for each neuron as
                 # represented input signal x preferred direction
-                J = map_gemv(1.0, self.shared_encoders, X, 1.0, J)
+                for i in range(self.array_size):
+                    J = TT.inc_subtensor(J[i],
+                       TT.dot(self.shared_encoders[i], X[i].T))
 
             # if noise has been specified for this neuron,
             if self.noise: 
