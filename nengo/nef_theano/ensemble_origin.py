@@ -9,7 +9,7 @@ import numpy as np
 from . import neuron
 from . import cache
 from .origin import Origin
-from simulator import map_gemv
+from helpers import map_gemv
 
 class EnsembleOrigin(Origin):
     def __init__(self, ensemble, dt, func=None, eval_points=None):

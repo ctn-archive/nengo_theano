@@ -5,24 +5,6 @@ from theano import tensor as TT
 import numpy as np
 
 from . import origin
-import simulator
-
-class ScalarFunctionOfTime(object):
-    def __init__(self, name, func, dimensions=()):
-        self.name = name
-        initial_value = func(0.0)
-        self.origin = {'X': origin.Origin(func=func,
-                                          initial_value=initial_value)
-                      }
-
-    def update(self, dt):
-        # XXX real shot in the dark here...
-        theano_func = getattr(TT, self.origin['X'].func.__name__)
-
-        return [(self.origin['X'].decoded_output,
-                 TT.unbroadcast(
-                     theano_func(simulator.simulation_time).dimshuffle('x'),
-                     0))]
 
 
 class Input(object):

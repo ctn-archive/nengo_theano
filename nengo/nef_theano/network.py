@@ -13,7 +13,6 @@ from . import origin
 from . import input
 from . import subnetwork
 from . import connection
-import simulator
 
 class Network(object):
     def __init__(self, name, seed=None, fixed_seed=None, dt=.001):
@@ -382,19 +381,11 @@ class Network(object):
             name=name, neurons=neurons, dimensions=dimensions,
             array_size=array_size, **kwargs)
     
-    def make_input(self, name, value, zero_after_time=None): 
+    def make_input(self, *args, **kwargs): 
         """Create an input and add it to the network."""
-        if zero_after_time:
-            node = input.Input(name, value, zero_after_time)
-            self.add(node)
-        else:
-            if callable(value):
-                node = input.ScalarFunctionOfTime(name, func=value)
-                self.nodes[node.name] = node
-            else:
-                node = input.Input(name, value, zero_after_time)
-                self.add(node)
-        return node
+        i = input.Input(*args, **kwargs)
+        self.add(i)
+        return i
         
     def make_subnetwork(self, name):
         """Create a subnetwork.  This has no functional purpose other than
@@ -437,7 +428,7 @@ class Network(object):
 
         p = probe.Probe(name=name, target=target, target_name=target_name, 
             dt_sample=dt_sample, **kwargs)
-        self.nodes[name] = p
+        self.add(p)
         return p
             
     def make_theano_tick(self):
@@ -458,8 +449,7 @@ class Network(object):
                 updates.update(node.update(self.dt))
 
         # create graph and return optimized update function
-        return theano.function([simulator.simulation_time], [],
-                               updates=updates.items())
+        return theano.function([], [], updates=updates.items())
 
     def run(self, time):
         """Run the simulation.
@@ -484,10 +474,10 @@ class Network(object):
                 node.theano_tick()
 
             # run the theano nodes
-            self.theano_tick(t)
+            self.theano_tick()    
 
         # update run_time variable
-        self.run_time = t
+        self.run_time += time
 
     def write_data_to_hdf5(self, filename='data'):
         """This is a function to call after simulation that writes the 
