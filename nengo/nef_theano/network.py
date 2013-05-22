@@ -540,3 +540,18 @@ class Network(object):
         iom.save(block)
         # close up hdf5 file
         iom.close()
+    
+    def set_alias(self, alias, node):
+        """Adds a named shortcut to an existing node within this network to be
+        used to simplify connect() calls.
+        
+        For example, you can do::
+        
+            net.set_alias('vision','A.B.C.D.E')
+            net.set_alias('motor','W.X.Y.Z')
+            net.connect('vision','motor')       
+                 
+        :param string alias: the new short name to create
+        :param string node: the existing node name
+        """    
+        self.nodes[alias] = self.nodes[node]    
