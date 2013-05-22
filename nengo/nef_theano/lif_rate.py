@@ -35,22 +35,22 @@ class LIFRateNeuron(neuron.Neuron):
         j_bias = 1 - alpha * intercepts
         return alpha, j_bias
 
-    def update(self, input_current):
+    def update(self, J, dt):
         """Theano update rule that implementing LIF rate neuron type.
         
         Returns dictionary with firing rate for current time step.
 
-        :param float array input_current:
+        :param float array J:
             the input current for the current time step
         
         """
         # set up denominator of LIF firing rate equation
         rate = self.tau_ref - self.tau_rc * TT.log(
-            1 - 1.0 / TT.maximum(input_current, 0))
+            1 - 1.0 / TT.maximum(J, 0))
         
         # if input current is enough to make neuron spike,
         # calculate firing rate, else return 0
-        rate = TT.switch(input_current > 1, 1 / rate, 0)
+        rate = TT.switch(J > 1, 1 / rate, 0)
 
         # return dictionary of internal variables to update
         return OrderedDict({

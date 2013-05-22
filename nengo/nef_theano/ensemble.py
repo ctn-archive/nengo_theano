@@ -99,7 +99,7 @@ class Ensemble:
 
         # if we're creating a spiking ensemble
         if self.mode == 'spiking': 
-
+        
             # TODO: handle different neuron types,
             self.neurons = neuron.types[neuron_type](
                 size=(array_size, self.neurons_num),
@@ -119,7 +119,7 @@ class Ensemble:
 
             # force to 32 bit for consistency / speed
             self.bias = self.bias.astype('float32')
-                    
+
             # compute encoders
             self.encoders = self.make_encoders(encoders=encoders)
             # combine encoders and gain for simplification
@@ -133,16 +133,18 @@ class Ensemble:
             self.learned_terminations = []
 
             # make default origin
-            self.add_origin('X', func=None, dt=dt, eval_points=self.eval_points) 
+            self.add_origin('X', func=None, dt=dt, eval_points=self.eval_points)
 
         elif self.mode == 'direct': 
             
             # make default origin
-            self.add_origin('X', func=None, dimensions=self.dimensions*self.array_size) 
+            self.add_origin('X', func=None, 
+                            dimensions=self.dimensions*self.array_size) 
             # reset neurons_num to 0
             self.neurons_num = 0
 
-    def add_termination(self, name, pstc, decoded_input=None, encoded_input=None):
+    def add_termination(self, name, pstc, 
+                        decoded_input=None, encoded_input=None):
         """Accounts for a new termination that takes the given input
         (a theano object) and filters it with the given pstc.
 
