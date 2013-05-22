@@ -21,14 +21,9 @@ class LIF_Op(theano.Op):
                 and self.tau_rc == other.tau_rc
                 and self.upsample == other.upsample)
 
-    def make_node(self,
-            #alpha, j_bias,
-            voltage, refractory_time,
-            input_current, dt):
-        orig_inputs = [voltage, refractory_time,
-                input_current, dt]
-        tsor_inputs = map(theano.tensor.as_tensor_variable,
-                orig_inputs)
+    def make_node(self, voltage, refractory_time, input_current, dt):
+        orig_inputs = [voltage, refractory_time, input_current, dt]
+        tsor_inputs = map(theano.tensor.as_tensor_variable, orig_inputs)
 
         new_voltage = voltage.type()
         new_refractory_time = refractory_time.type()
@@ -38,14 +33,10 @@ class LIF_Op(theano.Op):
         return theano.Apply(self, tsor_inputs, outputs)
 
     def perform(self, node, inputs, outstor):
-        #alpha, j_bias, voltage, refractory_time, input_current, dt = inputs
-        voltage, refractory_time, input_current, dt = inputs
+        voltage, refractory_time, J, dt = inputs
 
         tau_rc = self.tau_rc
         tau_ref = self.tau_ref
-
-        #J = j_bias + alpha * input_current
-        J = input_current
 
         dt = dt / self.upsample
         spiked = (voltage != voltage)  # -- bool array of False
@@ -143,10 +134,9 @@ class LIFNeuron(neuron.Neuron):
         :param float dt: the timestep of the update
         """
         op = LIF_Op(tau_ref=self.tau_ref, tau_rc=self.tau_rc)
-        new_v, new_rt, spiked = op(
-                #self.alpha, self.j_bias,
-                self.voltage, self.refractory_time,
-                input_current=J, dt=dt)
+        new_v, new_rt, spiked = op(self.voltage, 
+            self.refractory_time, input_current=J, dt=dt)
+
         return OrderedDict([
             (self.voltage, new_v),
             (self.refractory_time, new_rt),

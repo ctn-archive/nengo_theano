@@ -6,8 +6,10 @@ from theano import tensor as TT
 from theano.sandbox.rng_mrg import MRG_RandomStreams as RandomStreams
 import numpy as np
 
-from . import neuron
 from . import cache
+from . import neuron
+from . import lif
+from . import lif_rate
 from .origin import Origin
 from helpers import map_gemv
 
@@ -76,7 +78,6 @@ class EnsembleOrigin(Origin):
                 raise Exception("Evaluation points must be of the form: " + 
                     "[dimensions x num_samples]")
 
-
         # compute the target_values at the sampled points 
         if func is None:
             # if no function provided, use identity function as default
@@ -111,23 +112,44 @@ class EnsembleOrigin(Origin):
             if data is not None:
                 Ginv, A = data
             else:
-                # compute the input current for every neuron and every sample point
-                J = TT.dot(self.ensemble.encoders[index], eval_points)
-                J += self.ensemble.bias[index][:, np.newaxis]
 
-                # so in parallel we can calculate the activity
-                # of all of the neurons at each sample point 
-                neurons = self.ensemble.neurons.__class__(
-                    size=(self.ensemble.neurons_num, self.num_samples), 
-                    tau_rc=self.ensemble.neurons.tau_rc,
-                    tau_ref=self.ensemble.neurons.tau_ref)
+                if self.ensemble.neurons.__class__ == lif.LIFNeuron or \
+                    self.ensemeble.neurons.__class__ == lif_rate.LIFRateNeurons:
 
-                # run the neuron model for 1 second,
-                # accumulating spikes to get a spike rate
-                #TODO: is this long enough? Should it be less?
-                # If we do less, we may get a good noise approximation!
-                A = neuron.accumulate(J=J, neurons=neurons, dt=dt, 
-                    time=dt*200, init_time=dt*20)
+                    # compute the input current for every neuron and every sample point
+                    J = np.dot(self.ensemble.encoders[index], eval_points)
+                    J += self.ensemble.bias[index][:, np.newaxis]
+
+                    # set up denominator of LIF firing rate equation
+                    A = self.ensemble.neurons.tau_ref - self.ensemble.neurons.tau_rc * \
+                        np.log(1 - 1.0 / np.maximum(J, 0))
+                    
+                    # if input current is enough to make neuron spike,
+                    # calculate firing rate, else return 0
+                    A = np.where(J > 1, 1 / A, 0)
+
+                else:
+                    ## This is a generic method for generating an activity matrix
+                    ## for any type of neuron model. 
+
+                    # compute the input current for every neuron and every sample point
+                    J = TT.dot(self.ensemble.encoders[index], eval_points)
+                    J += self.ensemble.bias[index][:, np.newaxis]
+
+                    # so in parallel we can calculate the activity
+                    # of all of the neurons at each sample point 
+                    neurons = self.ensemble.neurons.__class__(
+                        size=(self.ensemble.neurons_num, self.num_samples), 
+                        tau_rc=self.ensemble.neurons.tau_rc,
+                        tau_ref=self.ensemble.neurons.tau_ref)
+
+                    # run the neuron model for 1 second,
+                    # accumulating spikes to get a spike rate
+                    #TODO: is this long enough? Should it be less?
+                    # If we do less, we may get a good noise approximation!
+                    A = neuron.accumulate(J=J, neurons=neurons, dt=dt, 
+                        time=dt*200, init_time=dt*20)
+
                 # add noise to elements of A
                 # std_dev = max firing rate of population * .1
                 noise = .1 # from Nengo
@@ -183,21 +205,21 @@ class EnsembleOrigin(Origin):
         Returns float array of sample points.
         
         """
-        srng = RandomStreams(seed=self.ensemble.seed)
-        samples = srng.normal((self.num_samples, self.ensemble.dimensions))
-        
-        # normalize magnitude of sampled points to be of unit length
-        norm = TT.sum(samples * samples, axis=[1], keepdims=True) 
-        samples = samples / TT.sqrt(norm)
+        np.random.seed(self.ensemble.seed)
+        samples = np.random.normal(size=(self.num_samples, self.ensemble.dimensions))
 
+        # normalize magnitude of sampled points to be of unit length
+        norm = np.sum(samples * samples, axis=1).reshape(self.num_samples, 1)
+        samples /= np.sqrt(norm)
+        
         # generate magnitudes for vectors from uniform distribution
-        scale = (srng.uniform((self.num_samples,))
+        scale = (np.random.uniform(size=(self.num_samples,1))
                  ** (1.0 / self.ensemble.dimensions))
 
         # scale sample points
-        samples = samples.T * scale 
-        
-        return theano.function([], samples)()
+        samples *= scale
+
+        return samples.T
 
     def update(self, dt, spikes):
         """the theano computation for converting neuron output
