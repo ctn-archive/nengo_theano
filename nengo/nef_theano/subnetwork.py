@@ -54,3 +54,13 @@ class SubNetwork(object):
         """Call the theano tick function for the network
         """
         self.network.theano_tick()
+        
+    def set_alias(self, alias, node):
+        """Adds a named shortcut to an existing node within this network to be
+        used to simplify connect() calls.
+        
+        :param string alias: the new short name to create
+        :param string node: the existing node name
+        """    
+        
+        self.network.set_alias('%s.%s'%(self.name, alias), '%s.%s'%(self.name, node))    
