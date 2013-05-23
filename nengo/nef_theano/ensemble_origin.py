@@ -176,16 +176,8 @@ class EnsembleOrigin(Origin):
 
                 # formerly 0.1 * 0.1 * max(w), set threshold
                 limit = dnoise * max(w) 
-                for i in range(len(w)):
-                    if w[i] < limit:
-                        # if < limit set eval = 0
-                        w[i] = 0
-                    else:
-                        # prep for upcoming Ginv calculation
-                        w[i] = 1.0 / w[i]
-                # w[:, np.newaxis] gives transpose of vector,
-                # np.multiply is very fast element-wise multiplication
-                Ginv = np.dot(v, np.multiply(w[:, np.newaxis], v.T)) 
+                v_we_want = v[:, w >= limit] / np.sqrt(w[w >= limit])
+                Ginv = np.dot(v_we_want, v_we_want.T)
                 
                 #Ginv=np.linalg.pinv(G, rcond=.01)  
                 cache.set_gamma_inv(index_key, (Ginv, A))
