@@ -10,8 +10,9 @@ from .. import nef_theano as nef
 
 build_time_start = time.time()
 
-timesteps = 1000
+timesteps = 10000
 dt_step = 0.001
+
 net = nef.Network('Encoder Test', dt=dt_step)
 net.make_input('in1', math.sin)
 net.make_input('in2', math.cos)
