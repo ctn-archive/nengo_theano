@@ -79,4 +79,4 @@ def test_dot():
     plt.plot(dot_probe.get_data())
     plt.tight_layout()
 
-test_dot()
+#test_dot()

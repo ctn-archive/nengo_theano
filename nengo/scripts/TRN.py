@@ -116,9 +116,11 @@ def make_TRN(net, name, neurons, dimensions, dim_fb_err, radius=1.5,
     TRN.connect('err_sum', 'integrator', transform=inhib_matrix2, pstc=1)
 
 def test_TRN():
+    import time
 
+    start_time = time.time()
     net = nef.Network('TRN test')
-
+ 
     def cx_func(x):
         return [math.sin(x), -math.sin(x), math.cos(x)]
 
@@ -135,11 +137,16 @@ def test_TRN():
 
     output_probe = net.make_probe('TRN.output')
 
+    build_time = time.time()
+    print "build time: ", build_time - start_time
+
     net.run(1)
 
+    print "sim time: ", time.time() - build_time
+
     import matplotlib.pyplot as plt
-    plt.ion(); plt.close()
     plt.plot(output_probe.get_data())
     plt.tight_layout()
+    plt.show()
 
 test_TRN()

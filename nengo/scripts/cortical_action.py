@@ -88,4 +88,4 @@ def test_cortical_action():
     plt.plot(ca1_probe.get_data())
     plt.tight_layout()
 
-test_cortical_action()
+#test_cortical_action()

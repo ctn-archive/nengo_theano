@@ -179,7 +179,6 @@ class EnsembleOrigin(Origin):
                 v_we_want = v[:, w >= limit] / np.sqrt(w[w >= limit])
                 Ginv = np.dot(v_we_want, v_we_want.T)
                 
-                #Ginv=np.linalg.pinv(G, rcond=.01)  
                 cache.set_gamma_inv(index_key, (Ginv, A))
 
             U = np.dot(A, target_values.T)

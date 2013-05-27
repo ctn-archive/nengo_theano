@@ -85,4 +85,4 @@ def test_abs_val():
     plt.plot(av_probe.get_data())
     plt.tight_layout()
 
-test_abs_val()
+#test_abs_val()
