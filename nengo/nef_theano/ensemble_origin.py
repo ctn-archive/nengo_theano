@@ -223,13 +223,13 @@ class EnsembleOrigin(Origin):
             from the attached population
 
         """
-
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range
         r = self.ensemble.radius
         # weighted summation over neural activity to get decoded_output
         z = TT.zeros((self.ensemble.array_size, self.func_size), dtype='float32')
         decoded_output = TT.flatten(
-            map_gemv(r / dt, self.decoders.dimshuffle(0,2,1), spikes, 1.0, z))
+            map_gemv(alpha=r / dt, A=self.decoders.dimshuffle(0,2,1), 
+                X=spikes, beta=1.0, J=z))
 
         return OrderedDict({self.decoded_output: decoded_output})

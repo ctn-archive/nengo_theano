@@ -228,7 +228,7 @@ class Ensemble:
 
         learn_projections = [TT.dot(
             pre.neurons.output[learned_term.pre_index(i)],  
-            learned_term.weight_matrix[i % self.array_size]) 
+            learned_term.weight_matrix[i % self.array_size].T) 
             for i in range(self.array_size * pre.array_size)]
 
         # now want to sum all the output to each of the post ensembles 
@@ -358,11 +358,8 @@ class Ensemble:
 
         for ii, di in enumerate(self.decoded_input.values()):
             # add its values to the total decoded input
-            if ii == 0:
-                X = di.value
-            else:
-                X += di.value
-
+            if ii == 0: X = di.value
+            else: X += di.value
             updates.update(di.update(dt))
 
         # if we're in spiking mode, then look at the input current and 
@@ -381,7 +378,8 @@ class Ensemble:
             if X is not None:
                 # add to input current for each neuron as
                 # represented input signal x preferred direction
-                J = map_gemv(1.0, self.shared_encoders, X, 1.0, J)
+                J = map_gemv(alpha=1.0, A=self.shared_encoders, 
+                    X=X, beta=1.0, J=J)
 
             # if noise has been specified for this neuron,
             if self.noise: 
