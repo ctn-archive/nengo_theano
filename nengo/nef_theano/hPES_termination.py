@@ -61,30 +61,33 @@ class hPESTermination(LearnedTermination):
         """
         """
         # get the error as represented by the post neurons
+        # should be a vector, (post_neurons x error.dimensions)
         encoded_error = TT.sum(self.encoders * TT.reshape( self.error_value, 
             (self.post.array_size, 1, self.post.dimensions)) , axis=-1)
 
         supervised_rate = self.learning_rate
         #TODO: more efficient rewrite with theano batch command? 
+        # this will be a matrix, same size as the connection weight matrix
         delta_supervised = [
-            supervised_rate * 
-            self.pre_filtered[self.pre_index(i)][None,:] *
-            encoded_error[i % self.post.array_size]
+            encoded_error[i % self.post.array_size][:,None] * 
+            supervised_rate * self.pre_filtered[self.pre_index(i)][None,:]
             for i in range(self.post.array_size * self.pre.array_size) ]
 
         unsupervised_rate = TT.cast(
             self.learning_rate * self.scaling_factor, dtype='float32')
         #TODO: more efficient rewrite with theano batch command? 
+        # this will be a matrix, same size as the connection weight matrix
         delta_unsupervised = [
-            unsupervised_rate * self.pre_filtered[self.pre_index(i)][None,:] *
             ( 
-                self.post_filtered[i % self.post.array_size] * 
+                self.post_filtered[i % self.post.array_size][:,None] * 
                 ( 
                     self.post_filtered[i % self.post.array_size] - 
                     self.theta[i % self.post.array_size] 
                 ) * 
                 self.gains[i % self.post.array_size] 
-            ) for i in range(self.post.array_size * self.pre.array_size) ]
+            ) 
+            * unsupervised_rate * self.pre_filtered[self.pre_index(i)][None,:]
+            for i in range(self.post.array_size * self.pre.array_size) ]
 
         new_wm = (self.weight_matrix
                 + TT.cast(self.supervision_ratio, 'float32') * delta_supervised

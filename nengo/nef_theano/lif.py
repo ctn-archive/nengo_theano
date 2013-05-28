@@ -134,9 +134,10 @@ class LIFNeuron(neuron.Neuron):
         :param float dt: the timestep of the update
         """
         op = LIF_Op(tau_ref=self.tau_ref, tau_rc=self.tau_rc)
-        new_v, new_rt, spiked = op(self.voltage, 
-            self.refractory_time, input_current=J, dt=dt)
-
+        new_v, new_rt, spiked = op(
+                self.voltage, self.refractory_time,
+                input_current=J, dt=dt)
+        
         return OrderedDict([
             (self.voltage, new_v),
             (self.refractory_time, new_rt),
