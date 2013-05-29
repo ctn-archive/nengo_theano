@@ -109,14 +109,13 @@ class Ensemble:
             # compute alpha and bias
             self.srng = RandomStreams(seed=seed)
             self.max_rate = max_rate
-            max_rates = self.srng.uniform(
+            max_rates = np.random.uniform(
                 size=(self.array_size, self.neurons_num),
                 low=max_rate[0], high=max_rate[1])  
-            threshold = self.srng.uniform(
+            threshold = np.random.uniform(
                 size=(self.array_size, self.neurons_num),
                 low=intercept[0], high=intercept[1])
-            self.alpha, self.bias = theano.function(
-                [], self.neurons.make_alpha_bias(max_rates, threshold))()
+            self.alpha, self.bias = self.neurons.make_alpha_bias(max_rates, threshold)
 
             # force to 32 bit for consistency / speed
             self.bias = self.bias.astype('float32')
@@ -216,7 +215,7 @@ class Ensemble:
             weight_matrix = np.random.uniform(
                 size=(self.array_size * pre.array_size,
                       self.neurons_num, pre.neurons_num),
-                low=-.001, high=.001)
+                low=-1e-3, high=1e-3)
             kwargs['weight_matrix'] = weight_matrix
         else:
             # make sure it's an np.array
@@ -305,8 +304,8 @@ class Ensemble:
         """
         if encoders is None:
             # if no encoders specified, generate randomly
-            encoders = self.srng.normal(
-                (self.array_size, self.neurons_num, self.dimensions))
+            encoders = np.random.normal(
+                size=(self.array_size, self.neurons_num, self.dimensions))
         else:
             # if encoders were specified, cast list as array
             encoders = np.array(encoders).T
@@ -318,10 +317,10 @@ class Ensemble:
             encoders = np.tile(encoders, (self.array_size, 1, 1))
 
         # normalize encoders across represented dimensions 
-        norm = TT.sum(encoders * encoders, axis=[2], keepdims=True)
-        encoders = encoders / TT.sqrt(norm)        
+        norm = np.sum(encoders * encoders, axis=2)[:, :,None]
+        encoders = encoders / np.sqrt(norm)        
 
-        return theano.function([], encoders)()
+        return encoders.astype('float32')
 
     def theano_tick(self):
 
