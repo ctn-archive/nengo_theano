@@ -49,7 +49,7 @@ def compute_transform(dim_pre, dim_post, array_size, weight=1,
             post = index_post[i % len(index_post)]
             transform[post][pre] = weight
 
-    transform = np.array(transform)
+    transform = np.array(transform).astype('float32')
 
     # reformulate to account for post.array_size
     if transform.shape == (dim_post * array_size, dim_pre):
@@ -126,7 +126,7 @@ class Case2(theano.Op):
         pre_array_size, pre_neurons_num = self.shape4[2:]
 
         encoded_output = np.zeros((post_array_size, post_neurons_num),
-                dtype=node.outputs[0].dtype)
+                dtype='float32')
         for ii in xrange(post_neurons_num):
             encoded_output[:, ii] = np.dot(transform[:, ii], pre_output)
         outstor[0][0] = encoded_output

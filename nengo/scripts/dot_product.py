@@ -1,6 +1,6 @@
 from .. import nef_theano as nef
 
-def make_dot(net, name, neurons, dimensions1, dimensions2, mode='spiking'):
+def make(net, name, neurons, dimensions1, dimensions2, mode='spiking'):
     """A function that makes a subnetwork that calculates the dot product
     between a matrix and a vector, and adds it to the network.
 

@@ -147,6 +147,7 @@ def test_TRN():
     print "sim time: ", time.time() - build_time
 
     import matplotlib.pyplot as plt
+    plt.subplot(311); plt.title('output')
     plt.plot(output_probe.get_data())
     plt.subplot(312); plt.title('TRN abs val output')
     plt.plot(avout_probe.get_data()); plt.ylim([-1,1])
@@ -155,4 +156,4 @@ def test_TRN():
     plt.tight_layout()
     plt.show()
 
-test_TRN()
+#test_TRN()

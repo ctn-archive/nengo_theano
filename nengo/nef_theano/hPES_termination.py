@@ -8,16 +8,16 @@ from . import neuron
 from .learned_termination import LearnedTermination
 
 class hPESTermination(LearnedTermination):
-    """
-    # learning_rate = 5e-7      # from nengo
-    # theta_tau = 20.           # from nengo
-    # scaling_factor = 20e3     # from nengo
-    # supervision_ratio = 0.5   # from nengo
-    """
 
-    theta_tau = 0.02
+    #theta_tau = 0.02
+
+    # The scaling factor is to increase 
+    # the influence of unsupervised learning
     scaling_factor = 10.
-    supervision_ratio = 1.0
+    theta_tau = .020           # from nengo
+
+    supervision_ratio = 0.5   # from nengo
+    learning_rate = 5e-7      # from nengo
 
     def __init__(self, *args, **kwargs):
         """
@@ -79,13 +79,13 @@ class hPESTermination(LearnedTermination):
         # this will be a matrix, same size as the connection weight matrix
         delta_unsupervised = [
             ( 
-                self.post_filtered[i % self.post.array_size][:,None] * 
+                self.post_filtered[i % self.post.array_size] * 
                 ( 
                     self.post_filtered[i % self.post.array_size] - 
                     self.theta[i % self.post.array_size] 
                 ) * 
                 self.gains[i % self.post.array_size] 
-            ) 
+            )[:,None]
             * unsupervised_rate * self.pre_filtered[self.pre_index(i)][None,:]
             for i in range(self.post.array_size * self.pre.array_size) ]
 

@@ -117,9 +117,6 @@ class Ensemble:
                 low=intercept[0], high=intercept[1])
             self.alpha, self.bias = self.neurons.make_alpha_bias(max_rates, threshold)
 
-            # force to 32 bit for consistency / speed
-            self.bias = self.bias.astype('float32')
-
             # compute encoders
             self.encoders = self.make_encoders(encoders=encoders)
             # combine encoders and gain for simplification
@@ -221,6 +218,7 @@ class Ensemble:
             # make sure it's an np.array
             #TODO: error checking to make sure it's the right size
             kwargs['weight_matrix'] = np.array(kwargs['weight_matrix']) 
+        weight_matrix = weight_matrix.astype('float32')
 
         learned_term = learned_termination_class(
             pre=pre, post=self, error=error, **kwargs)
@@ -326,7 +324,7 @@ class Ensemble:
 
         if self.mode == 'direct': 
             # set up matrix to store accumulated decoded input
-            X = np.zeros((self.array_size, self.dimensions))
+            X = np.zeros((self.array_size, self.dimensions), dtype='float32')
             # updates is an ordered dictionary of theano variables to update
         
             for di in self.decoded_input.values(): 
@@ -377,8 +375,10 @@ class Ensemble:
             if X is not None:
                 # add to input current for each neuron as
                 # represented input signal x preferred direction
-                J = map_gemv(alpha=1.0, A=self.shared_encoders, 
-                    X=X, beta=1.0, J=J)
+
+                for i in range(self.array_size): #len(self.bias)):
+                    J = TT.basic.inc_subtensor(J[i], 
+                        TT.dot(X[i], self.shared_encoders[i].T))
 
             # if noise has been specified for this neuron,
             if self.noise: 

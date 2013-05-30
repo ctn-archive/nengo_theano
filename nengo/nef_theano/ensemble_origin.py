@@ -33,6 +33,7 @@ class EnsembleOrigin(Origin):
         initial_value = np.zeros(self.ensemble.array_size * func_size) 
         Origin.__init__(self, func=func, initial_value=initial_value)
         self.func_size = func_size
+        self.decoders_shuffled = self.decoders.dimshuffle(0,2,1) 
     
     def compute_decoders(self, func, dt, eval_points=None):     
         """Compute decoding weights.
@@ -97,6 +98,7 @@ class EnsembleOrigin(Origin):
             if len(target_values.shape) < 2:
                 target_values.shape = target_values.shape[0], 1
             target_values = target_values.T
+        eval_points = eval_points.astype('float32')
         
         # replicate attached population of neurons into array of ensembles,
         # one ensemble per sample point
@@ -172,19 +174,20 @@ class EnsembleOrigin(Origin):
                 # evalues w and normalized evectors v
                 w, v = np.linalg.eigh(G)
 
-                dnoise = self.ensemble.decoder_noise * self.ensemble.decoder_noise
+                dnoise = self.ensemble.decoder_noise * \
+                    self.ensemble.decoder_noise
 
                 # formerly 0.1 * 0.1 * max(w), set threshold
                 limit = dnoise * max(w) 
-                v_we_want = v[:, w >= limit] / np.sqrt(w[w >= limit])
+                v_we_want = np.float32(v[:, w >= limit] / np.sqrt(w[w >= limit]))
                 Ginv = np.dot(v_we_want, v_we_want.T)
                 
                 cache.set_gamma_inv(index_key, (Ginv, A))
 
-            U = np.dot(A, target_values.T)
+            U = np.dot(np.float32(A), np.float32(target_values.T))
             
             # compute decoders - least squares method 
-            decoders[index] = np.dot(Ginv, U)
+            decoders[index] = np.dot(np.float32(Ginv), np.float32(U))
 
         self.decoders = theano.shared(decoders.astype('float32'), 
             name='ensemble_origin.decoders')
@@ -226,10 +229,10 @@ class EnsembleOrigin(Origin):
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range
         r = self.ensemble.radius
-        # weighted summation over neural activity to get decoded_output
-        z = TT.zeros((self.ensemble.array_size, self.func_size), dtype='float32')
-        decoded_output = TT.flatten(
-            map_gemv(alpha=r / dt, A=self.decoders.dimshuffle(0,2,1), 
-                X=spikes, beta=1.0, J=z))
 
-        return OrderedDict({self.decoded_output: decoded_output})
+        z = TT.zeros((self.ensemble.array_size, self.func_size), dtype='float32')
+        for i in range(self.ensemble.array_size):
+            z = TT.basic.set_subtensor(z[i], r / dt * TT.dot(spikes[i], 
+                self.decoders_shuffled[i].T)) 
+
+        return OrderedDict({self.decoded_output: TT.flatten(z)})

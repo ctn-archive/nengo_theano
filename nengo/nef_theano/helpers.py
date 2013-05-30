@@ -1,5 +1,5 @@
 from _collections import OrderedDict
-import theano
+import theano; import theano.tensor as TT
 import numpy as np
 
 class MapGemv(theano.Op):
@@ -7,7 +7,7 @@ class MapGemv(theano.Op):
         pass
 
     def make_node(self, alpha, A, X, beta, J):
-        inputs = map(theano.tensor.as_tensor_variable,
+        inputs = map(TT.as_tensor_variable,
             [alpha, A, X, beta, J])
         return theano.Apply(self, inputs, [inputs[-1].type()])
 

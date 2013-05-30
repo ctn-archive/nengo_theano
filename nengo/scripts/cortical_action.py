@@ -25,7 +25,7 @@ def make_cortical_action(net, name, neurons, dimensions, action_vals=None,
         action_vals = [random.random() * scale - scale/2
             for d in range(dimensions)]
 
-    cortical_action.make_input('action', value=action_vals)
+    cortical_action.make_input('action', values=action_vals)
 
     # create input relay
     cortical_action.make('input', neurons=1, 
@@ -59,7 +59,7 @@ def test_cortical_action():
     input = np.array([-.2, .5, -.8])
     action_vals = np.array([-.4, .35, .78])
 
-    net.make_input('input', value=input)
+    net.make_input('input', values=input)
 
     make_cortical_action(net, 'ca0', neurons=200, dimensions=3, 
         action_vals=action_vals) #, mode='direct')
