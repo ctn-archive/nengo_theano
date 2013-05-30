@@ -377,7 +377,7 @@ class Ensemble:
                 # represented input signal x preferred direction
 
                 for i in range(self.array_size): #len(self.bias)):
-                    TT.basic.inc_subtensor(J[i], 
+                    J = TT.basic.inc_subtensor(J[i], 
                         TT.dot(X[i], self.shared_encoders[i].T))
 
             # if noise has been specified for this neuron,
