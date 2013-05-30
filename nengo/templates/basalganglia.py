@@ -65,7 +65,7 @@ def make(net, name='Basal Ganglia', dimensions=1, neurons=100,
         return mp * (x[0] - ep)
     tr = [[wp] * dimensions for i in range(dimensions)]    
     netbg.connect('STN', 'GPi', func=func_stn, transform=tr, pstc=tau_ampa)
-    netbg.connect('STN', 'GPe', func=func_stn, transform=tr, pstc=tau_ampa)        
+    netbg.connect('STN', 'GPe', func=func_stn, transform=tr, pstc=tau_ampa)
 
     # connect the GPe to GPi and STN (inhibitory)
     def func_gpe(x):

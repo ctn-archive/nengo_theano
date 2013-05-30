@@ -1,14 +1,16 @@
 """This is a test file to test the func parameter on the connect method"""
 
 import math
-
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import time
 
 from .. import nef_theano as nef
 
+start_time = time.time()
+
 net = nef.Network('Function Test')
-net.make_input('in', value=math.sin)
+net.make_input('in', values=math.sin)
 net.make('A', neurons=250, dimensions=1)
 net.make('B', neurons=250, dimensions=3)
 
@@ -28,8 +30,12 @@ Ip = net.make_probe('in', dt_sample=dt_step, pstc=pstc)
 Ap = net.make_probe('A', dt_sample=dt_step, pstc=pstc)
 Bp = net.make_probe('B', dt_sample=dt_step, pstc=pstc)
 
+build_time = time.time()
+print "build time: ", build_time - start_time
+
 print "starting simulation"
 net.run(timesteps * dt_step)
+print "sim time: ", time.time() - build_time
 
 # plot the results
 plt.ioff(); plt.clf(); plt.hold(1);

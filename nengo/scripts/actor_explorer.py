@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import random
 import sys
@@ -40,7 +41,7 @@ net = nef.Network('Actor Explorer')
 # Create function input
 #======================
 # default competitor value found from trial and error
-net.make_input('default_competitor', value=[1.5]) 
+net.make_input('default_competitor', values=[1.5]) 
 
 class TrainingInput(nef.SimpleNode):
     def init(self):
@@ -68,7 +69,7 @@ net.add(TrainingInput('SNinput'))
 #===================
 neurons_explorer = 50
 cortical_action.make_cortical_action(net=net, name='action', 
-    neurons=N2, dimensions=d2, action_vals=[2], mode='direct') 
+    neurons=N2, dimensions=d2, action_vals=[1], mode='direct') 
 # create modulating ILP populations
 net.make('ILP', neurons=2*N1, dimensions=1) 
 net.make('ILP_relay', neurons=neurons_explorer, dimensions=1)
@@ -78,21 +79,21 @@ net.connect('SNinput:ILinput',
 net.connect('ILP', 
             'ILP_relay')
 
-
 # Explorer
 #==================
 net.make('explorer', neurons=neurons_explorer, dimensions=1)
 
 # Actor
 #==================
-net.make('actor', neurons=N1/2, dimensions=1, radius=.5)
-net.make(name='learn_signal_actor', neurons=N1, dimensions=1)#, noise=10)
+net.make('actor', neurons=N1, dimensions=1)#, radius=.5)
+net.make(name='learn_signal_actor', neurons=N1, dimensions=1)
+    #, noise=10)
 
 # actor learning connections, slower than explorer, still fast
 net.learn(
     pre='ILP', post='actor',
     error='learn_signal_actor', 
-    rate=5e-8, supervision_ratio=1) 
+    rate=5e-6, supervision_ratio=1) 
 
 # Basal ganglia
 #==================
@@ -106,32 +107,28 @@ basalganglia.make(net=net, name="Basal Ganglia",
 # into modulation values for the primitive weights
 thalamus.make(net=net, name='Thalamus', 
     neurons=50, dimensions=1+1, inhib_scale=1) # +1 for default_competitor  
-
-def shift(x): return x[0] + .5
-net.make('weight_shift', neurons=N2, dimensions=1, mode=mode)
-
-net.connect('Thalamus.output',
-            'weight_shift', 
-            index_pre=0)
-net.connect('weight_shift',
-            'action.input')
+# BG input
 net.connect('actor', 
             'bg_input', 
-            index_post=0, func=shift) 
+            index_post=0) 
 net.connect('explorer', 
             'bg_input', index_post=0) 
 net.connect('default_competitor', 
             'bg_input', index_post=1)
 net.connect('bg_input', 
             'Basal Ganglia.input')
+# BG output
 net.connect('Basal Ganglia.output', 
             'Thalamus.input')
+net.connect('Thalamus.output',
+            'action.input', 
+            index_pre=0)
 
 # Error signals
 #==================
 net.make('error', neurons=N2, dimensions=d3, mode=mode)
 # for projecting fb error into action space
-dot_product.make_dot(net=net, name='error_projection', 
+dot_product.make(net=net, name='error_projection', 
     neurons=N2, dimensions1=1, dimensions2=d3, mode='direct') 
 net.make('error_actor_gate', neurons=N2, dimensions=2, mode=mode)
 
@@ -162,6 +159,7 @@ net.connect('error',
 net.connect('explorer', 
             'error_actor_gate', 
             index_post=1)
+
 def error_thresh(x): 
     if abs(x[0]) < .1: return x[1]
     return 0
@@ -183,7 +181,39 @@ net.connect('actual',
 build_time = time.time()
 print "build time: ", build_time - start_time
 
+# Record data
+#====================
+dt = .001
+#SNin_probe = net.make_probe('SNinput:ILinput')
+SNgoal_probe = net.make_probe('SNinput:goal', dt_sample=dt*10)
+exp_probe = net.make_probe('explorer', dt_sample=dt*10)
+act_probe = net.make_probe('actor', dt_sample=dt*10)
+#lsa_probe = net.make_probe('learn_signal_actor', dt_sample=dt*10)
+out_probe = net.make_probe('action.output', dt_sample=dt*10)
+err_probe = net.make_probe('error', dt_sample=dt*10)
+lb_probe = net.make_probe('explorer_learn_bias.output', dt_sample=dt*10)
+
 # Run the system
 #====================
-net.run(1)
-print "sim time: ", time.time() - build_time
+runtime = 100
+net.run(runtime)
+print "simulated %.2f seconds in %.2fs real time"%(runtime, time.time() - build_time)
+
+# Plot results
+#====================
+'''plt.subplot(611); plt.title('input'); plt.ylim([-1,1])
+plt.plot(SNin_probe.get_data())
+plt.subplot(612); plt.title('goal'); plt.ylim([-1,1])
+plt.plot(SNgoal_probe.get_data())
+plt.subplot(613); plt.title('explorer'); plt.ylim([-1,1])
+plt.plot(exp_probe.get_data())
+plt.subplot(614); plt.title('actor'); plt.ylim([-1,1])
+plt.plot(act_probe.get_data())
+plt.subplot(615); plt.title('learn_signal_actor'); plt.ylim([-1,1])
+plt.plot(lsa_probe.get_data())
+plt.subplot(616); plt.title('output'); plt.ylim([-1,1])
+plt.plot(out_probe.get_data())
+plt.tight_layout()
+plt.show()'''
+plt.plot()
+plt.show()
