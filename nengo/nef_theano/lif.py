@@ -50,8 +50,8 @@ class LIFNeuron(neuron.Neuron):
         """Resets the state of the neuron."""
         Neuron.reset(self)
 
-        self.voltage.set_value(np.zeros(self.size).astype('float32'))
-        self.refractory_time.set_value(np.zeros(self.size).astype('float32'))
+        self.voltage.set_value(np.zeros(self.size, dtype='float32'))
+        self.refractory_time.set_value(np.zeros(self.size, dtype='float32'))
 
     def update(self, J, dt):
         """Theano update rule that implementing LIF rate neuron type

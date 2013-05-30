@@ -224,10 +224,12 @@ class Network(object):
                     # can't specify a function with either side encoded connection
                     assert func == None 
 
-                    case2 = connection.Case2(
-                        (post.array_size, post.neurons_num,
-                         pre.array_size, pre.neurons_num))
-                    encoded_output = case2(transform, pre_output)
+                    encoded_output = TT.zeros(
+                            (post.array_size, post.neurons_num),
+                            dtype='float32')
+                    for ii in xrange(post.neurons_num):
+                        encoded_output = TT.basic.set_subtensor(encoded_output[:, ii],
+                             TT.dot(transform[:, ii], pre_output))
     
                     # pass in the pre population encoded output function
                     # to the post population, connecting them for theano
@@ -449,7 +451,7 @@ class Network(object):
                 updates.update(node.update(self.dt))
 
         # create graph and return optimized update function
-        return theano.function([], [], updates=updates.items())
+        return theano.function([], [], updates=updates.items())#, mode='ProfileMode')
 
     def run(self, time):
         """Run the simulation.
@@ -475,6 +477,7 @@ class Network(object):
 
             # run the theano nodes
             self.theano_tick()    
+            if i % 1000 == 0: print 'time: ', t, 's'
 
         # update run_time variable
         self.run_time += time

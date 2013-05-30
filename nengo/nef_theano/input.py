@@ -13,7 +13,7 @@ class Input(object):
     Any callable can be used an input function.
 
     """
-    def __init__(self, name, value, zero_after_time=None):
+    def __init__(self, name, values, zero_after_time=None):
         """
         :param string name: name of the function input
         :param value: defines the output decoded_output
@@ -31,20 +31,20 @@ class Input(object):
         self.origin = {}
 
         # if value parameter is a python function
-        if callable(value): 
-            self.origin['X'] = origin.Origin(func=value)
+        if callable(values): 
+            self.origin['X'] = origin.Origin(func=values)
         # if value is dict of time:value pairs
-        elif isinstance(value, dict):
-            self.change_time = sorted(value.keys())[0]
+        elif isinstance(values, dict):
+            self.change_time = sorted(values.keys())[0]
             # check for size of dict elements
-            if isinstance(value[self.change_time], list):
-                initial_value = np.zeros(len(value[self.change_time]))
+            if isinstance(values[self.change_time], list):
+                initial_value = np.zeros(len(values[self.change_time]))
             else: initial_value = np.zeros(1)
             self.origin['X'] = origin.Origin(func=None, 
                 initial_value=initial_value)
-            self.values = value
+            self.values = values
         else:
-            self.origin['X'] = origin.Origin(func=None, initial_value=value)
+            self.origin['X'] = origin.Origin(func=None, initial_value=values)
 
     def reset(self):
         """Resets the function output state values.
@@ -76,12 +76,12 @@ class Input(object):
 
         # update output decoded_output
         if self.origin['X'].func is not None:
-            value = self.origin['X'].func(self.t)
+            values = self.origin['X'].func(self.t)
 
             # if value is a scalar output, make it a list
-            if isinstance(value, Number):
-                value = [value] 
+            if isinstance(values, Number):
+                values = [values] 
 
             # cast as float32 for consistency / speed,
             # but _after_ it's been made a list
-            self.origin['X'].decoded_output.set_value(np.float32(value)) 
+            self.origin['X'].decoded_output.set_value(np.float32(values)) 
