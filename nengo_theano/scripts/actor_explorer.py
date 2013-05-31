@@ -184,18 +184,18 @@ print "build time: ", build_time - start_time
 # Record data
 #====================
 dt = .001
-#SNin_probe = net.make_probe('SNinput:ILinput')
+SNin_probe = net.make_probe('SNinput:ILinput')
 SNgoal_probe = net.make_probe('SNinput:goal', dt_sample=dt*10)
 exp_probe = net.make_probe('explorer', dt_sample=dt*10)
 act_probe = net.make_probe('actor', dt_sample=dt*10)
 #lsa_probe = net.make_probe('learn_signal_actor', dt_sample=dt*10)
 out_probe = net.make_probe('action.output', dt_sample=dt*10)
 err_probe = net.make_probe('error', dt_sample=dt*10)
-lb_probe = net.make_probe('explorer_learn_bias.output', dt_sample=dt*10)
+#lb_probe = net.make_probe('explorer_learn_bias.output', dt_sample=dt*10)
 
 # Run the system
 #====================
-runtime = 100
+runtime = 1000
 net.run(runtime)
 print "simulated %.2f seconds in %.2fs real time"%(runtime, time.time() - build_time)
 
