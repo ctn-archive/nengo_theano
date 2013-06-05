@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 start_time = time.time()
 

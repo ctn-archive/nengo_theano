@@ -1,88 +1,49 @@
-import nef.nef_theano as nef
-#from ..nef_theano import hpes_termination as learning
-from nef.nef_theano.hPES_termination import hPESTermination as learning
+import matplotlib.pyplot as plt
+import numpy as np
 import random
-from datetime import datetime 
 import sys
-from numpy import arange
+import time
 
+import nengo_theano as nef
+
+import abs_val; reload(abs_val)
+import cortical_action; reload(cortical_action)
+import dot_product; reload(dot_product)
+import learn_bias; reload(learn_bias)
+import TRN; reload(TRN)
+
+from ..templates import basalganglia; reload(basalganglia)
+from ..templates import thalamus; reload(thalamus)
+
+# Set random seed
+#======================
 seed = random.randint(0, sys.maxint)
+random.seed(seed)
+print "seed: ", seed
 
-# constants / parameter setup etc
+
+# Constants 
+#======================
 N1 = 100 # number of neurons
 d1 = 1 # number of actions 
 d2 = 1 # number of dimensions in each primitive
 d3 = d2 # number of dimensions in the goal / actual states 
-pstc = 0.01 # post-synaptic time constant
 inhib_scale = 10 # weighting on inhibitory matrix
 tau_inhib=0.005 # pstc for inhibitory connection
 
+testing = 1 # set testing = True
+N2 = N1; mode = 'spiking'
+if (testing): N2 = 1; mode = 'direct'
+
 # Create the network object
-net = nef.Network('Procedural_Learning', seed=seed) 
-random.seed(seed)
-print 'seed: ', seed
-
-def make_TRN(name, neurons, dimensions, dim_fb_err, radius=1, tau_inhib=0.005, inhib_scale1=10, inhib_scale2=1):
-
-    TRN = nef.Network(name)
-
-    TRN.make('input', neurons=N1, dimensions=dimensions) # create population to be out
-    TRN.make('thalamic input', neurons=N1, dimensions=dimensions) # create population to be out
-    TRN.add(make_abs_val(name='abs_val_input', neurons=neurons, dimensions=dimensions)) # create a subnetwork to calculate the absolute value 
-    for d in range(dimensions):
-        TRN.make('output %d'%d, neurons=neurons, dimensions=1)#, intercept=(.05,1)) # create output relays
-
-    # now we track the derivative of sum, and only let output relay the input
-    # if the derivative is below a given threshold
-    TRN.make('derivative', neurons=radius*neurons, dimensions=2, radius=radius) # create population to calculate the derivative
-    TRN.connect('derivative', 'derivative', index_pre=0, index_post=1, pstc=0.05) # set up recurrent connection
-    TRN.add(make_abs_val(name='abs_val_deriv', neurons=neurons, dimensions=1, intercept=(.1,1))) # create a subnetwork to calculate the absolute value 
-    
-    # create integrator that saturates quickly in response to any derivative signal and inhibits output, decreases in response to a second input 
-    # the idea being that you connect system feedback error up to the second input so that BG contribution is inhibited unless there's FB error
-    TRN.make('integrator', neurons=neurons, dimensions=1, intercept=(.1,1))
-    TRN.connect('integrator', 'integrator', weight=1) # hook up to hold current value
-
-    # connect it up!
-    def subone(x): 
-        for i in range(len(x)):
-            x[i] = x[i] - 1
-        return x # to shift thalamic range - 1 to 1
-    for d in range(dimensions):
-        TRN.connect('input', 'output %d'%d, pstc=1e-6, index_pre=d) # set up communication channel
-        TRN.connect('thalamic input', 'output %d'%d, pstc=1e-6, index_pre=d, func=subone) # set up thalamic input 
-    TRN.connect('input', 'abs_val_input.input', pstc=1e-6)
-    TRN.connect('abs_val_input.output', 'derivative', index_post=0)
-    
-    def sub(x): return [x[0] - x[1]]
-    TRN.connect('derivative', 'abs_val_deriv.input', func=sub)
-    TRN.connect('abs_val_deriv.output', 'integrator', weight=10) # saturate integrator if there's any derivative
-        
-    # set up inhibitory matrix
-    inhib_matrix1 = [[-inhib_scale1]] * neurons 
-    inhib_matrix2 = [[-inhib_scale2]] * neurons * dim_fb_err
-    TRN.get('integrator').addTermination('inhibition', inhib_matrix2, 1, False) # 1 is the pstc value
-    for d in range(dimensions):
-        TRN.get('output %d'%d).addTermination('inhibition', inhib_matrix1, tau_inhib, False)
-        TRN.connect('integrator', TRN.get('output %d'%d).getTermination('inhibition'))
- 
-    TRN.add(make_abs_val(name='int-inhib', neurons=neurons, dimensions=dim_fb_err, intercept=(.05,1))) # create a subnetwork to calculate the absolute value 
-    #TRN.make('err_step', neurons=1000, dimensions=1, encoders=[[1]]) # this is to standardize the amount of time it takes to inhibit the integrator, regardless of error magnitude
-    TRN.make('err_step', neurons=N1, dimensions=1)
-    #def step(x): # if err_step has anything to project, send 1 instead
-    #    return 1
-    def step(x):
-        if x > 0: return 1
-        else: return 0
-    TRN.make('err_relay', neurons=N1, dimensions=1)
-    TRN.connect('int-inhib.output', 'err_step')
-    TRN.connect('err_step', 'err_relay', func=step)
-    TRN.connect('err_relay', TRN.get('integrator').getTermination('inhibition'))
-
-    return TRN
+#======================
+start_time = time.time()
+net = nef.Network('Actor Explorer') 
 
 # Create function input
 #======================
+# default competitor value found from trial and error
+net.make_input('default_competitor', values=[1.5]) 
 
 class TrainingInput(nef.SimpleNode):
     def init(self):
@@ -112,15 +73,20 @@ net.add(TrainingInput('SNinput'))
 action_vals = [[2]]
 net.make_input('default_competitor', value=[1.5]) # value found from trial and error
 
-# Create populations
+# Cortical actions and ILP
 #===================
 for d in range(d1): 
-    net.add(make_cortical_action('action %d'%d, neurons=N1, dimensions=d2, action_vals=action_vals[d])) # create cortical actions
-    net.make('ILP %d'%d, neurons=10*N1, dimensions=1) # create modulating ILP populations
-net.make('input', neurons=N1, dimensions=d3) # population representing the input to the system
+    cortical_action.make(net=net, name='action %d'%d, 
+        neurons=N1, dimensions=d2, action_vals=action_vals[d])) 
+    # create modulating ILP populations
+    net.make('ILP %d'%d, neurons=10*N1, dimensions=1) 
+# population representing the input to the system
+net.make('input', neurons=N1, dimensions=d3) 
 net.make('bg_input', neurons=10*N1, dimensions=d1)
-net.make('bg_input_for_real', neurons=d1*N1, dimensions=d1+1) # +1 for default_competitor 
-net.make('actual', neurons=N1, dimensions=d2) # where all the cortical action output is summed
+# +1 for default_competitor 
+net.make('bg_input_for_real', neurons=d1*N1, dimensions=d1+1) 
+# where all the cortical action output is summed
+net.make('actual', neurons=N1, dimensions=d2) 
 
 # Create networks for dot product and weighted summation
 # relay population (for preserving dot1 output)
@@ -182,41 +148,4 @@ net.connect('bg_input_for_real', bg.getTermination('input'))
 net.connect(bg.getOrigin('output'), thalamus.getTermination('bg_input'))
 
 net.connect('error_projection.output', 'learn_signal_bg') # connect up error signal to bg learn signal
-
-# run and save info to file!
-#===========================
-'''trials = 500
-log_dir = "scripts/results" # set up directory to save to 
-for i in range(trials):
-
-    log_name = "results-" + datetime.now().strftime("%Y%m%d-%H_%M_%S") + ".csv" # set filename
-    logNode = nef.Log(net, "log", dir=log_dir, filename=log_name, interval=0.001) # setup data logger
-
-    # add all nodes that we want data from
-    logNode.add('input', origin='X')
-    #logNode.add('SNinput', origin='constant')
-    logNode.add('actual', origin='X')
-    logNode.add('error_bg', origin='X')
-    #logNode.add_spikes('bg_input') # record the neural activity of the striatum
-    for d in range(d1):
-        logNode.add('TRN.output %d'%d, origin='X') # bg contributed weights
-        logNode.add('ILP %d'%d, origin='X') # cortex projected weights  
-        #logNode.add_spikes('ILP %d'%d)
-
-    net.network.simulator.run(0, 3, .001, False) # run the simulation
-    net.network.removeStepListener(logNode) # remove the logNode to close the file we're writing to
-
-    learned_weights = {} # create dictionary to store learned weights 
-    for d in range(d1): # store all the learned weights
-        learned_weights['ILP %d'%d] = net.get('ILP %d'%d).getTermination('input_00').getTransform()
-    learned_weights['bg_input'] = net.get('bg_input').getTermination('ILP multiplexer_00').getTransform()
-    
-    net.network.simulator.resetNetwork(False, False) # reset the network
-
-    for d in range(d1): # load in all the learned weights
-        net.get('ILP %d'%d).getTermination('input_00').setTransform(learned_weights['ILP %d'%d], False)
-    net.get('bg_input').getTermination('ILP multiplexer_00').setTransform(learned_weights['bg_input'], False)
-
-    #print "trial: %d"%i
-    '''
 

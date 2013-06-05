@@ -5,13 +5,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 from .. import templates
 
 net = nef.Network('BG Test')
 def func(x):
     return [math.sin(x), .5,.2]
-net.make_input('in', value=func)
+net.make_input('in', values=func)
 templates.basalganglia.make(
     net=net, name='BG', dimensions=3)
 

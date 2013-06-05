@@ -1,7 +1,7 @@
-from .. import nef_theano as nef
+import nengo_theano as nef
 import random
 
-def make_cortical_action(net, name, neurons, dimensions, action_vals=None, 
+def make(net, name, neurons, dimensions, action_vals=None, 
                          scale=2.0, mode='spiking'): 
     """A function that makes a subnetwork to calculate the weighted 
     value of a specified cortical action.
@@ -61,9 +61,9 @@ def test_cortical_action():
 
     net.make_input('input', values=input)
 
-    make_cortical_action(net, 'ca0', neurons=200, dimensions=3, 
+    make(net, 'ca0', neurons=200, dimensions=3, 
         action_vals=action_vals) #, mode='direct')
-    ca1_a_vals = make_cortical_action(net, 'ca1', neurons=100, 
+    ca1_a_vals = make(net, 'ca1', neurons=100, 
         dimensions=3, mode='direct')
 
     net.connect('input', 'ca0.input')
@@ -76,7 +76,6 @@ def test_cortical_action():
     net.run(1)
 
     import matplotlib.pyplot as plt
-    plt.ion(); plt.close()
     a = 'input = ', input
     plt.subplot(311); plt.title(a)
     plt.plot(im_probe.get_data())
@@ -87,5 +86,6 @@ def test_cortical_action():
     plt.subplot(313); plt.title(c)
     plt.plot(ca1_probe.get_data())
     plt.tight_layout()
+    plt.show()
 
 #test_cortical_action()

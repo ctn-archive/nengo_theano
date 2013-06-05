@@ -1,4 +1,4 @@
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 def make(net, name, neurons, dimensions1, dimensions2, mode='spiking'):
     """A function that makes a subnetwork that calculates the dot product
@@ -52,10 +52,10 @@ def test_dot():
     import numpy as np
     matrix = np.array([[.1, .2],[.3, .4], [.5, .6]])
     vector = np.array([.4, .5])
-    net.make_input('input_matrix', value=matrix.flatten())
-    net.make_input('input_vector', value=vector)
+    net.make_input('input_matrix', values=matrix.flatten())
+    net.make_input('input_vector', values=vector)
 
-    make_dot(net, 'dot_product', neurons=1, 
+    make(net, 'dot_product', neurons=1, 
         dimensions1=3, dimensions2=2, mode='direct')
 
     net.connect('input_matrix', 'dot_product.input_matrix')
@@ -69,7 +69,6 @@ def test_dot():
     net.run(1)
 
     import matplotlib.pyplot as plt
-    plt.ion(); plt.close()
     plt.subplot(311); plt.title('matrix input')
     plt.plot(im_probe.get_data())
     plt.subplot(312); plt.title('vector input')
@@ -78,5 +77,6 @@ def test_dot():
     plt.subplot(313); plt.title(a)
     plt.plot(dot_probe.get_data())
     plt.tight_layout()
+    plt.show()
 
 #test_dot()

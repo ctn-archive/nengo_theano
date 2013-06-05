@@ -1,4 +1,4 @@
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 def make_abs_val(net, name, neurons, dimensions, intercept=[0, 1]):
     """A function that makes a subnetwork to calculate the absolute
@@ -50,9 +50,9 @@ def test_abs_val():
 
     import numpy as np
     input = np.array([-.2, .5, -.8])
-    net.make_input('input', value=input)
+    net.make_input('input', values=input)
 
-    make_abs_val(net, 'abs_val', neurons=neurons, 
+    make_abs_val(net, 'abs_val', neurons=50, 
         dimensions=3, intercept=(.2, 1))
 
     net.connect('input', 'abs_val.input')
