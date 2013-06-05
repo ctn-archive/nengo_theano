@@ -6,7 +6,7 @@ and by using the array_size parameter in the network.make command.
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 def test_array():
 

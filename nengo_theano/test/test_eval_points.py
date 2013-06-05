@@ -20,7 +20,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 # create the list of evaluation points
 eval_points1 = np.arange(-1, 0, .5)

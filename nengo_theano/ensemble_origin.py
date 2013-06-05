@@ -11,7 +11,6 @@ from . import neuron
 from . import lif
 from . import lif_rate
 from .origin import Origin
-from helpers import map_gemv
 
 class EnsembleOrigin(Origin):
     def __init__(self, ensemble, dt, func=None, eval_points=None):

@@ -1,9 +1,9 @@
-from .. import nef_theano as nef
+import nengo_theano as nef
 import random
 
 import abs_val
 
-def make_TRN(net, name, neurons, dimensions, dim_fb_err, radius=1.5, 
+def make(net, name, neurons, dimensions, dim_fb_err, radius=1.5, 
              tau_inhib=0.005, inhib_scale1=10, inhib_scale2=1):
     """A function that makes a subnetwork to calculate the weighted 
     value of a specified cortical action.
@@ -64,20 +64,24 @@ def make_TRN(net, name, neurons, dimensions, dim_fb_err, radius=1.5,
     # find derivatives and send to absolute value network
 
     # create population to calculate the derivative
-    TRN.make_array('derivative', neurons=neurons, 
+    TRN.make('derivative', neurons=neurons, 
         array_size=dimensions, dimensions=2, radius=radius) 
     # set up recurrent connection
-    TRN.connect('derivative', 'derivative', 
-        index_pre=range(0,2*dimensions,2), 
-        index_post=range(1,2*dimensions,2), pstc=0.05)
+    TRN.connect('derivative', 
+                'derivative', 
+                index_pre=range(0,2*dimensions,2), 
+                index_post=range(1,2*dimensions,2), pstc=0.05)
     # connect deriv input 
-    TRN.connect('input_cortex', 'derivative', 
-        index_post=range(0,2*dimensions,2), pstc=1e-6)
+    TRN.connect('input_cortex', 
+                'derivative', 
+                index_post=range(0,2*dimensions,2), pstc=1e-6)
     # connect deriv output
-    TRN.connect('derivative', 'abs_val_deriv.input',
-        index_pre=range(0,2*dimensions,2), weight=-1)
-    TRN.connect('derivative', 'abs_val_deriv.input',
-        index_pre=range(1,2*dimensions,2))
+    TRN.connect('derivative', 
+                'abs_val_deriv.input',
+                index_pre=range(0,2*dimensions,2), weight=-1)
+    TRN.connect('derivative', 
+                'abs_val_deriv.input',
+                index_pre=range(1,2*dimensions,2))
     
     # create integrator that saturates quickly in response to any derivative 
     # signal and inhibits output, decreases in response to a second input 
@@ -85,35 +89,48 @@ def make_TRN(net, name, neurons, dimensions, dim_fb_err, radius=1.5,
     # input so that BG contribution is inhibited unless there's FB error
     TRN.make('integrator', neurons=neurons, dimensions=1, intercept=(.1,1))
     # hook up to hold current value
-    TRN.connect('integrator', 'integrator', weight=1.1) 
+    TRN.connect('integrator', 
+                'integrator', weight=1.1) 
 
     # connect it up, pstc low so relays don't cause delay
     for d in range(dimensions):
         # set up communication channel
-        TRN.connect('input_cortex', 'output %d'%d, pstc=1e-6, index_pre=d) 
+        TRN.connect('input_cortex', 
+                    'output %d'%d, pstc=1e-6, index_pre=d) 
         # set up thalamic input
-        TRN.connect('input_thalamus', 'output %d'%d, pstc=1e-6, 
+        TRN.connect('input_thalamus', 
+                    'output %d'%d, pstc=1e-6, 
             index_pre=d)#, func=subone) 
-        TRN.connect('output %d'%d, 'output', index_post=d)
+        TRN.connect('output %d'%d, 
+                    'output', index_post=d)
     # saturate integrator if there is a strong derivative
-    TRN.connect('abs_val_deriv.output', 'integrator', weight=10) 
+    TRN.connect('abs_val_deriv.output', 
+                'integrator', weight=10) 
         
     # set up inhibitory matrices
     inhib_matrix1 = [[-inhib_scale1]] * neurons 
     inhib_matrix2 = [[-inhib_scale2]] * neurons
 
     for d in range(dimensions):
-        TRN.connect('integrator', 'output %d'%d, 
-            transform=inhib_matrix1, pstc=tau_inhib)
+        TRN.connect_neurons(
+            'integrator', 
+            'output %d'%d, 
+            weight_matrix=inhib_matrix1, pstc=tau_inhib)
 
-    TRN.connect('input_error', 'abs_error.input')
+    TRN.connect('input_error', 
+                'abs_error.input')
     # sum error signals
-    TRN.connect('abs_error.output', 'err_step') 
+    TRN.connect('abs_error.output', 
+                'err_step') 
     # calculate step function
-    TRN.connect('err_step', 'err_sum', func=step)
+    TRN.connect('err_step', 
+                'err_sum', func=step)
     # connect up error relay to integrator with high pstc 
     # value to get high pass filter behavior
-    TRN.connect('err_sum', 'integrator', transform=inhib_matrix2, pstc=1)
+    TRN.connect_neurons(
+        'err_sum', 
+        'integrator', 
+        weight_matrix=inhib_matrix2, pstc=1)
 
 def test_TRN():
     import time
@@ -124,16 +141,19 @@ def test_TRN():
     def cx_func(x):
         return [math.sin(x), -math.sin(x), math.cos(x)]
 
-    net.make_input('input_cortex', value=[.2, .5, -.3])
-    net.make_input('input_thalamus', value=[.5,.6,1])
-    net.make_input('input_error', value=[0, 0])
+    net.make_input('input_cortex', values=[.2, .5, -.3])
+    net.make_input('input_thalamus', values=[.5,.6,1])
+    net.make_input('input_error', values=[0, 0])
 
-    make_TRN(net, 'TRN', neurons=100, dimensions=3, 
+    make(net, 'TRN', neurons=100, dimensions=3, 
         dim_fb_err=2) #, mode='direct')
 
-    net.connect('input_cortex', 'TRN.input_cortex')
-    net.connect('input_thalamus', 'TRN.input_thalamus')#, weight=2)
-    net.connect('input_error', 'TRN.input_error')
+    net.connect('input_cortex', 
+                'TRN.input_cortex')
+    net.connect('input_thalamus', 
+                'TRN.input_thalamus')#, weight=2)
+    net.connect('input_error', 
+                'TRN.input_error')
 
     output_probe = net.make_probe('TRN.output')
     avout_probe = net.make_probe('TRN.abs_val_deriv.output')

@@ -6,7 +6,7 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 build_time_start = time.time()
 

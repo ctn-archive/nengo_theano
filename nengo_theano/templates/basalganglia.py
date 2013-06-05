@@ -86,7 +86,7 @@ def test_basalganglia():
     import matplotlib.pyplot as plt
     import math
 
-    from .. import nef_theano as nef
+    import nengo_theano as nef
     from .. import templates
 
     net = nef.Network('BG Test')

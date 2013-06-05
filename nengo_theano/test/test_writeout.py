@@ -7,7 +7,7 @@ import math
 import time
 from neo import hdf5io
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 build_time_start = time.time()
 

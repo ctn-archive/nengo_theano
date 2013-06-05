@@ -13,7 +13,7 @@ Tests:
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 neurons = 100
 dimensions = 1
@@ -36,16 +36,16 @@ inhib_matrix_2.extend([[[0] * dimensions] * neurons])  # for test 3
 inhib_matrix_2.extend([[[-10] * dimensions] * neurons])  # for test 3 
 inhib_matrix_3 = np.array(inhib_matrix_2).reshape(array_size * neurons, dimensions)# for test 4
 
-# define our transform and connect up! 
+# define our weight matrices and connect up! 
 net.connect('in1', 'A')
 net.connect('in2', 'B', index_pre=0)
 net.connect('in2', 'B2')
 net.connect('in2', 'B3')
 net.connect('in2', 'B4')
-net.connect('A', 'B', transform=inhib_matrix_1, pstc=.1) # for test 1
-net.connect('A', 'B2', transform=inhib_matrix_1) # for test 2
-net.connect('A', 'B3', transform=inhib_matrix_2) # for test 3
-net.connect('A', 'B4', transform=inhib_matrix_3) # for test 4
+net.connect_neurons('A', 'B', weight_matrix=inhib_matrix_1, pstc=.1) # for test 1
+net.connect_neurons('A', 'B2', weight_matrix=inhib_matrix_1) # for test 2
+net.connect_neurons('A', 'B3', weight_matrix=inhib_matrix_2) # for test 3
+net.connect_neurons('A', 'B4', weight_matrix=inhib_matrix_3) # for test 4
 
 timesteps = 500
 dt_step = 0.01

@@ -1,5 +1,3 @@
-from .. import nef_theano as nef
-
 def make(net, name='Thalamus', neurons=50, dimensions=2, 
          inhib_scale=3, tau_inhib=.005):
 
@@ -27,7 +25,9 @@ def make(net, name='Thalamus', neurons=50, dimensions=2,
         inhib_matrix_part = [[inhib_scaling_matrix[i]] * neurons]
         inhib_matrix.append(inhib_matrix_part[0])
 
-    th_net.connect('input', 'Thalamus', transform=inhib_matrix, pstc=tau_inhib)
+    th_net.connect_neurons('input', 
+                           'Thalamus', 
+                           weight_matrix=inhib_matrix, pstc=tau_inhib)
 
     def addOne(x): return [x[0]+1] 
     th_net.connect('Thalamus', 'output', func=addOne)
@@ -38,15 +38,14 @@ def test_thalamus():
     import numpy as np
     import matplotlib.pyplot as plt
     import math
-
-    from .. import nef_theano as nef
-    from .. import templates
+    
+    import nengo_theano as nef
 
     net = nef.Network('Thalamus Test')
     def func(x):
         return [abs(math.sin(x)), .5, 0]
-    net.make_input('in', value=func)
-    templates.thalamus.make(net=net, name='Thalamus', 
+    net.make_input('in', values=func)
+    make(net=net, name='Thalamus', 
         neurons=300, dimensions=3, inhib_scale=3)
 
     net.connect('in', 'Thalamus.input', pstc=1e-6)
@@ -74,3 +73,4 @@ def test_thalamus():
     plt.tight_layout()
     plt.show()
 
+#test_thalamus()

@@ -1,8 +1,7 @@
 import nose
 import numpy as np
 
-from .. import nef_theano as nef
-
+import nengo_theano as nef
 
 def test_cleanup():
     raise nose.SkipTest()

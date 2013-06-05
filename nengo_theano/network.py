@@ -12,7 +12,7 @@ from . import probe
 from . import origin
 from . import input
 from . import subnetwork
-from . import connection
+from . import helpers
 
 class Network(object):
     def __init__(self, name, seed=None, fixed_seed=None, dt=.001):
@@ -79,15 +79,6 @@ class Network(object):
         *weight* gives the value, and *index_pre* and *index_post*
         identify which dimensions to connect.
         
-        transform can be of several sizes:
-        
-        - post.dimensions * pre.dimensions:
-          Specify where decoded signal dimensions project
-        - post.neurons * pre.dimensions:
-          Overwrites post encoders, i.e. inhibitory connections
-        - post.neurons * pre.neurons:
-          Fully specify the connection weight matrix 
-
         If *func* is not None, a new Origin will be created on the
         pre-synaptic ensemble that will compute the provided function.
         The name of this origin will be taken from the name of
@@ -110,17 +101,17 @@ class Network(object):
         :param index_pre:
             The indexes of the pre-synaptic dimensions to use.
             Ignored if *transform* is not None.
-            See :func:`connection.compute_transform()`
+            See :func:`helpers.compute_transform()`
         :param float weight:
             Scaling factor for a transformation defined with
             *index_pre* and *index_post*.
             Ignored if *transform* is not None.
-            See :func:`connection.compute_transform()`
+            See :func:`helpers.compute_transform()`
         :type index_pre: List of integers or a single integer
         :param index_post:
             The indexes of the post-synaptic dimensions to use.
             Ignored if *transform* is not None.
-            See :func:`connection.compute_transform()`
+            See :func:`helpers.compute_transform()`
         :type index_post: List of integers or a single integer 
         :param function func:
             Function to be computed by this connection.
@@ -136,6 +127,11 @@ class Network(object):
             instead of creating a new one.
 
         """
+        # 1) pre = decoded, post = decoded
+        #     - in this case, transform will be 
+        #                       (post.dimensions x pre.origin.dimensions)
+        #     - decoded_input will be (post.array_size x post.dimensions)
+
         # reset timer in case the model has been run,
         # as adding a new node requires rebuilding the theano function 
         self.theano_tick = None  
@@ -154,93 +150,13 @@ class Network(object):
         dim_pre = pre_origin.dimensions 
       
         if transform is not None: 
-
-            # there are 3 cases
-            # 1) pre = decoded, post = decoded
-            #     - in this case, transform will be 
-            #                       (post.dimensions x pre.origin.dimensions)
-            #     - decoded_input will be (post.array_size x post.dimensions)
-            # 2) pre = decoded, post = encoded
-            #     - in this case, transform will be size 
-            #         (post.array_size x post.neurons x pre.origin.dimensions)
-            #     - encoded_input will be (post.array_size x post.neurons_num)
-            # 3) pre = encoded, post = encoded
-            #     - in this case, transform will be (post.array_size x 
-            #             post.neurons_num x pre.array_size x pre.neurons_num)
-            #     - encoded_input will be (post.array_size x post.neurons_num)
-
             # make sure contradicting things aren't simultaneously specified
             assert ((weight == 1) and (index_pre is None)
                     and (index_post is None))
 
-            transform = np.array(transform)
-            
-            # check to see if post side is an encoded connection, case 2 or 3
-            #TODO: a better check for this
-            if transform.shape[0] != post.dimensions * post.array_size \
-                                                or len(transform.shape) > 2:
-
-                if transform.shape[0] == post.array_size * post.neurons_num:
-                    transform = transform.reshape(
-                                      [post.array_size, post.neurons_num] +\
-                                                list(transform.shape[1:]))
-                
-                if len(transform.shape) == 2: # repeat array_size times
-                    transform = np.tile(transform, (post.array_size, 1, 1))
-                
-                # check for pre side encoded connection (case 3)
-                if len(transform.shape) > 3 or \
-                       transform.shape[2] == pre.array_size * pre.neurons_num:
-                    
-                    if transform.shape[2] == pre.array_size * pre.neurons_num: 
-                        transform = transform.reshape(
-                                        [post.array_size, post.neurons_num,  
-                                              pre.array_size, pre.neurons_num])
-                    assert transform.shape == \
-                            (post.array_size, post.neurons_num, 
-                             pre.array_size, pre.neurons_num)
-
-                    print 'setting pre_output=spikes'
-
-                    # get spiking output from pre population
-                    pre_output = pre.neurons.output 
-
-                    case1 = connection.Case1(
-                        (post.array_size, post.neurons_num,
-                         pre.array_size, pre.neurons_num))
-                    encoded_output = case1(transform, pre_output)
-
-                    # pass in the pre population encoded output function
-                    # to the post population, connecting them for theano
-                    post.add_termination(name=pre_name, pstc=pstc, 
-                        encoded_input=encoded_output)
-
-                    return
-                                   
-                else: # otherwise we're in case 2
-                    assert transform.shape ==  \
-                               (post.array_size, post.neurons_num, dim_pre)
-                    
-                    # can't specify a function with either side encoded connection
-                    assert func == None 
-
-                    encoded_output = TT.zeros(
-                            (post.array_size, post.neurons_num),
-                            dtype='float32')
-                    for ii in xrange(post.neurons_num):
-                        encoded_output = TT.basic.set_subtensor(encoded_output[:, ii],
-                             TT.dot(transform[:, ii], pre_output))
-    
-                    # pass in the pre population encoded output function
-                    # to the post population, connecting them for theano
-                    post.add_termination(name=pre_name, pstc=pstc, 
-                        encoded_input=encoded_output)
-
-                    return
-        
         # if decoded-decoded connection (case 1)
         # compute transform if not given, if given make sure shape is correct
-        transform = connection.compute_transform(
+        transform = helpers.compute_transform(
             dim_pre=dim_pre,
             dim_post=post.dimensions,
             array_size=post.array_size,
@@ -257,7 +173,101 @@ class Network(object):
         # to the post population, connecting them for theano
         post.add_termination(name=pre_name, pstc=pstc, 
             decoded_input=decoded_output) 
-    
+   
+    def connect_neurons(self, pre, post, weight_matrix, pstc=0.01):
+        """ This function makes a connection to post-synaptic neurons
+        directly either from a pre-synaptic vector or neuron space, 
+        depending on the shape of the weight matrix.
+        If weight_matrix is (post.neurons x pre.dim) then it connects
+        from the vector space of the pre-synaptic neuron, using the pre
+        synaptic decoders, but replacing the post-synaptic encoders.
+        If weight_matrix is (post.neurons x pre.neurons) then it connects
+        the neurons of the two populations directly together.
+
+        :param pre: pre-synaptic signal source
+        :type pre: Ensemble, Input, SimpleNode
+            note if neuron - neuron connection must be type Ensemble
+        :param Ensemble post: post-synaptic population of neurons
+        :param weight_matrix: set of connection weight strengths
+        :type weight_matrix: numpy.array, list
+        """
+        post = self.get_object(post)
+
+        # get the origin from the pre Node
+        pre_origin = self.get_origin(pre)
+        # get pre Node object from node dictionary
+        pre_name = pre
+        pre = self.get_object(pre)
+
+        # get decoded_output from specified origin
+        pre_output = pre_origin.decoded_output
+        dim_pre = pre_origin.dimensions 
+
+        weight_matrix = np.asarray(weight_matrix)
+
+        # make sure the weight_matrix is in the right form
+        if weight_matrix.shape[0] == post.array_size * post.neurons_num:
+            weight_matrix = weight_matrix.reshape(
+                              [post.array_size, post.neurons_num] +\
+                                        list(weight_matrix.shape[1:]))
+        if len(weight_matrix.shape) == 2: # repeat array_size times
+            weight_matrix = np.tile(weight_matrix, (post.array_size, 1, 1))
+        
+        # there are 2 cases
+        # 3) pre = encoded, post = encoded
+        #     - in this case, weight_matrix will be (post.array_size x 
+        #             post.neurons_num x pre.array_size x pre.neurons_num)
+        #     - encoded_input will be (post.array_size x post.neurons_num)
+
+        # check for pre side encoded connection (case 3)
+        if len(weight_matrix.shape) > 3 or \
+               weight_matrix.shape[2] == pre.array_size * pre.neurons_num:
+            
+            if weight_matrix.shape[2] == pre.array_size * pre.neurons_num: 
+                weight_matrix = weight_matrix.reshape(
+                                [post.array_size, post.neurons_num,  
+                                      pre.array_size, pre.neurons_num])
+            assert weight_matrix.shape == \
+                    (post.array_size, post.neurons_num, 
+                     pre.array_size, pre.neurons_num)
+
+            # get spiking output from pre population
+            pre_output = pre.neurons.output 
+
+            encoded_output = (weight_matrix * pre_output)
+            # sum the contribution from all pre neurons
+            # for each post neuron
+            encoded_output = np.sum(encoded_output, axis=3)
+            # sum the contribution from each of the
+            # pre arrays for each post neuron
+            encoded_output = np.sum(encoded_output, axis=2)
+
+            # pass in the pre population encoded output function
+            # to the post population, connecting them for theano
+            post.add_termination(name=pre_name, pstc=pstc, 
+                encoded_input=encoded_output)
+
+            return
+                          
+        # else 
+        # 2) pre = decoded, post = encoded
+        #     - in this case, weight_matrix will be size 
+        #         (post.array_size x post.neurons x pre.origin.dimensions)
+        #     - encoded_input will be (post.array_size x post.neurons_num)
+        assert weight_matrix.shape ==  \
+                   (post.array_size, post.neurons_num, dim_pre)
+        
+        encoded_output = TT.zeros((post.array_size, post.neurons_num),
+                                   dtype='float32')
+        for ii in xrange(post.neurons_num):
+            encoded_output = TT.basic.set_subtensor(encoded_output[:, ii],
+                 TT.dot(weight_matrix[:, ii], pre_output))
+
+        # pass in the pre population encoded output function
+        # to the post population, connecting them for theano
+        post.add_termination(name=pre_name, pstc=pstc, 
+            encoded_input=encoded_output)
+ 
     def get_object(self, name):
         """This is a method for parsing input to return the proper object.
 
@@ -373,7 +383,7 @@ class Network(object):
         self.nodes[name] = e
         return e
 
-    def make_array(self, name, neurons, array_size, dimensions=1, **kwargs):
+    def make_array(self, name, neurons, length, dimensions=1, **kwargs):
         """Generate a network array specifically.
 
         This function is depricated; use for legacy code
@@ -381,7 +391,7 @@ class Network(object):
         """
         return self.make(
             name=name, neurons=neurons, dimensions=dimensions,
-            array_size=array_size, **kwargs)
+            array_size=length, **kwargs)
     
     def make_input(self, *args, **kwargs): 
         """Create an input and add it to the network."""

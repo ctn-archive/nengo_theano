@@ -10,7 +10,6 @@ from . import origin
 from . import cache
 from . import filter
 from .hPES_termination import hPESTermination
-from .helpers import map_gemv
 
 class Ensemble:
     """An ensemble is a collection of neurons representing a vector space.

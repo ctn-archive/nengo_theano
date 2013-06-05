@@ -12,7 +12,7 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 neurons = 100
 dimensions = 1
@@ -35,10 +35,10 @@ weight_matrix_4 = [[[[1] * neurons] * 1] * neurons] * array_size # for test 4
 
 # define our transform and connect up! 
 net.connect('in1', 'A')
-net.connect('A', 'B', transform=weight_matrix_1) # for test 1
-net.connect('A', 'B2', transform=weight_matrix_2) # for test 2
-net.connect('A', 'B3', transform=weight_matrix_3) # for test 3
-net.connect('A', 'B4', transform=weight_matrix_4) # for test 4
+net.connect_neurons('A', 'B', weight_matrix=weight_matrix_1) # for test 1
+net.connect_neurons('A', 'B2', weight_matrix=weight_matrix_2) # for test 2
+net.connect_neurons('A', 'B3', weight_matrix=weight_matrix_3) # for test 3
+net.connect_neurons('A', 'B4', weight_matrix=weight_matrix_4) # for test 4
 
 timesteps = 500
 dt_step = 0.01

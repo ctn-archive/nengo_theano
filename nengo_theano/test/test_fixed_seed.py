@@ -6,7 +6,7 @@ identical ensembles.
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 net = nef.Network('Array Test', fixed_seed=5)
 net.make_input('in', [1], zero_after_time=1.0)

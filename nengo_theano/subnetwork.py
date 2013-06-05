@@ -16,6 +16,13 @@ class SubNetwork(object):
         """
         return self.network.connect('%s.%s'%(self.name, pre), 
                                      '%s.%s'%(self.name, post), *args, **kwargs)
+    def connect_neurons(self, pre, post, *args, **kwargs):
+        """Connect to post-synaptic neuorns inside the subnetwork
+        :param pre: the pre-synaptic node
+        :param post: the post-synaptic node
+        """
+        return self.network.connect_neurons('%s.%s'%(self.name, pre), 
+                                     '%s.%s'%(self.name, post), *args, **kwargs)
     def learn(self, pre, post, error, *args, **kwargs):
         """Create a learning connection inside the subnetwork
         :param pre: the pre-synaptic node

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import math
 import time
 
-from .. import nef_theano as nef
+import nengo_theano as nef
 
 def test_probe(simcls=None, show=False):
 

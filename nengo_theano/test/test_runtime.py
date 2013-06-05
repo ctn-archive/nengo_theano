@@ -3,7 +3,7 @@
 import math
 import time
 
-from nengo import nef_theano as nef
+import nengo_theano as nef
 
 net=nef.Network('Runtime Test', seed=123)
 net.make_input('in', value=math.sin)
