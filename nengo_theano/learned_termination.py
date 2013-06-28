@@ -52,10 +52,3 @@ class LearnedTermination(object):
         # multiply the output by the attached ensemble's radius
         # to put us back in the right range
         return collections.OrderedDict( {self.weight_matrix: self.learn()} ) 
-
-
-#TODO: This should be in the tests that need it, not in the main code?
-class NullLearnedTermination(LearnedTermination):
-    """This is a stub learning termination for architecture testing"""
-    def learn(self):
-        return self.weight_matrix

@@ -174,7 +174,8 @@ class Network(object):
         post.add_termination(name=pre_name, pstc=pstc, 
             decoded_input=decoded_output) 
    
-    def connect_neurons(self, pre, post, weight_matrix, pstc=0.01):
+    def connect_neurons(self, pre, post, weight_matrix, pstc=0.01,
+            func=None):
         """ This function makes a connection to post-synaptic neurons
         directly either from a pre-synaptic vector or neuron space, 
         depending on the shape of the weight matrix.
@@ -190,11 +191,18 @@ class Network(object):
         :param Ensemble post: post-synaptic population of neurons
         :param weight_matrix: set of connection weight strengths
         :type weight_matrix: numpy.array, list
+        :param function func:
+            Not for use on neuron-neuron connections, only vector-neurons connections.
+            Function of the decoded origin to be the presynaptic connection.
+            If None, default origin used.
+            The function takes a single parameter ``x``, which is
+            the current value of the *pre* ensemble, and must return
+            either a float or an array of floats.
         """
         post = self.get_object(post)
 
         # get the origin from the pre Node
-        pre_origin = self.get_origin(pre)
+        pre_origin = self.get_origin(pre, func)
         # get pre Node object from node dictionary
         pre_name = pre
         pre = self.get_object(pre)
@@ -230,6 +238,8 @@ class Network(object):
             assert weight_matrix.shape == \
                     (post.array_size, post.neurons_num, 
                      pre.array_size, pre.neurons_num)
+            # can't specify a function in this case
+            assert func == None
 
             # get spiking output from pre population
             pre_output = pre.neurons.output 
@@ -346,8 +356,8 @@ class Network(object):
         pre = self.get_object(pre)
         post = self.get_object(post)
         error = self.get_origin(error)
-        return post.add_learned_termination(name=pre_name, pre=pre, error=error, 
-            pstc=pstc, **kwargs)
+        return post.add_learned_termination(name=pre_name, pre=pre, 
+            error=error, pstc=pstc, dt=self.dt, **kwargs)
 
     def make(self, name, *args, **kwargs): 
         """Create and return an ensemble of neurons.
@@ -448,7 +458,6 @@ class Network(object):
         
         :returns: theano function
         """
-
         # dictionary for all variables
         # and the theano description of how to compute them 
         updates = OrderedDict()

@@ -187,7 +187,7 @@ class Ensemble:
                 name=name, pstc=pstc, source=encoded_input, 
                 shape=(self.array_size, self.neurons_num))
 
-    def add_learned_termination(self, name, pre, error, pstc, 
+    def add_learned_termination(self, name, pre, error, pstc, dt,
                                 learned_termination_class=hPESTermination,
                                 **kwargs):
         """Adds a learned termination to the ensemble.
@@ -212,19 +212,19 @@ class Ensemble:
                 size=(self.array_size * pre.array_size,
                       self.neurons_num, pre.neurons_num),
                 low=-1e-3, high=1e-3)
-            kwargs['weight_matrix'] = weight_matrix
+
+            kwargs['weight_matrix'] = weight_matrix.astype('float32')
         else:
             # make sure it's an np.array
             #TODO: error checking to make sure it's the right size
-            kwargs['weight_matrix'] = np.array(kwargs['weight_matrix']) 
-        weight_matrix = weight_matrix.astype('float32')
+            kwargs['weight_matrix'] = np.array(kwargs['weight_matrix'], dtype='float32') 
 
         learned_term = learned_termination_class(
             pre=pre, post=self, error=error, **kwargs)
 
         learn_projections = [TT.dot(
             pre.neurons.output[learned_term.pre_index(i)],  
-            learned_term.weight_matrix[i % self.array_size].T) 
+            learned_term.weight_matrix[i % self.array_size].T) / dt 
             for i in range(self.array_size * pre.array_size)]
 
         # now want to sum all the output to each of the post ensembles 

@@ -18,7 +18,7 @@ import random
 class TrainingInput(nef.SimpleNode):
     def init(self):
         self.input_vals = np.arange(-1, 1, .2)
-        self.period_length = 10
+        self.period_length = 1
         self.choose_time = 0.0
     def origin_ILinput(self):
         if (self.t >= self.choose_time):
@@ -42,7 +42,7 @@ net.make('A', neurons=neurons, dimensions=1)
 net.make('B', neurons=2*neurons, dimensions=1)
 net.make('error1', neurons=neurons, dimensions=1, mode='direct')
 
-net.learn(pre='A', post='B', error='error1', rate=5e-3)
+net.learn(pre='A', post='B', error='error1', rate=5e-5, pstc=.005)
 
 net.connect('SNinput:ILinput', 'A')
 net.connect('A', 'error1')

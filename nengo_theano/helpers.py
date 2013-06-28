@@ -21,7 +21,7 @@ def compute_transform(dim_pre, dim_post, array_size, weight=1,
         the indexes of the post-synaptic dimensions to use
     :type index_post: list of integers or a single integer
     :returns:
-        a two-dimensional transform matrix performing
+        a three-dimensional transform matrix performing
         the requested routing
 
     """
