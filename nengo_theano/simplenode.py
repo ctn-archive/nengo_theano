@@ -1,9 +1,13 @@
 from numbers import Number
+from _collections import OrderedDict
 import inspect
 
 import numpy as np
 import theano
+import theano.tensor as TT
 
+from . import helpers
+from . import filter
 from . import origin
 
 class SimpleNode(object):
@@ -42,12 +46,12 @@ class SimpleNode(object):
     def __init__(self, name):
         """
         :param string name: the name of the created node
-        :param float pstc: the default time constant on the filtered inputs
-        :param int dimensions:
-            the number of dimensions of the decoded input signal
+
         """
         self.t = 0  # current simulation time
         self.name = name
+        self.dimensions = {} # tracks dimensions of inputs
+        self.input = {}
         self.origin = {}
 
         self.init()  # initialize internal variables if there are any
@@ -55,11 +59,30 @@ class SimpleNode(object):
         # look at all the defined methods, if any start with 'origin_',
         # make origins that implement the defined function
         for name, method in inspect.getmembers(self, inspect.ismethod):
-            if name.startswith('origin_'):
-                # add to dictionary of origins
-                self.origin[name[7:]] = origin.Origin(
-                    func=method, initial_value=method())
 
+            if name.startswith('origin_'):
+                # get initial value
+                initial_value = method()
+
+                # add to dictionary of origins
+                if isinstance(initial_value, TT.TensorVariable):
+                    #import pdb; pdb.set_trace()
+                    self.origin[name[7:]] = origin.Origin(
+                        func=None, initial_value=np.zeros(initial_value.eval().shape))
+                    self.origin[name[7:]].method = method
+
+                else:
+                    self.origin[name[7:]] = origin.Origin(
+                        func=method, initial_value=initial_value)
+
+    def add_input(self, name, dimensions):
+        """Create a Filter and add it to the list of input
+
+        """
+        self.input[name] = filter.Filter(
+            name=name, pstc=None, shape=(1, dimensions))
+        self.dimensions[name] = dimensions
+    
     def init(self):
         """Initialize the node.
 
@@ -68,6 +91,19 @@ class SimpleNode(object):
 
         """
         pass
+
+    def reset(self, **kwargs):
+        """Reset the state of all the internal variables."""
+        self.init(**kwargs)
+
+    def set_input_source(self, name, pstc, source):
+        """Set the source of input for a filter specified in init().
+
+        """
+        if not self.input.has_key(name):
+            print 'Invalid SimpleNode input name'
+        self.input[name].pstc = pstc
+        self.input[name].source = source
 
     def tick(self):
         """An extra utility function that is called every time step.
@@ -79,26 +115,36 @@ class SimpleNode(object):
         """
         pass
 
-    def reset(self, **kwargs):
-        """Reset the state of all the internal variables."""
-        self.init(**kwargs)
-
     def theano_tick(self):
         """Run the simple node.
-
-        :param float start: The time to start running
-        :param float end: The time to stop running
 
         """
         self.tick()
 
         for origin in self.origin.values():
-            value = origin.func()
+            if origin.func is not None:
+                value = origin.func()
+                # if value is a scalar output, make it a list
+                if isinstance(value, Number):
+                    value = [value]
 
-            # if value is a scalar output, make it a list
-            if isinstance(value, Number):
-                value = [value]
+                # cast as float32 for consistency / speed,
+                # but _after_ it's been made a list
+                origin.decoded_output.set_value(np.float32(value))
 
-            # cast as float32 for consistency / speed,
-            # but _after_ it's been made a list
-            origin.decoded_output.set_value(np.float32(value))
+    def update(self, dt):
+        """Update the input and output of all the theano variables.
+
+        """
+        
+        updates = OrderedDict()
+
+        for input in self.input.values():
+            updates.update(input.update(dt))
+
+        for origin in self.origin.values():
+            if origin.func is None: 
+                updates.update(
+                    {origin.decoded_output: origin.method()})
+
+        return updates
