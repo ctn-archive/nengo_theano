@@ -63,3 +63,20 @@ def compute_transform(dim_pre, dim_post, array_size, weight=1,
         transform = array_transform
 
     return transform
+
+
+def get_unique_name(name, dic):
+    """A helper function that runs through a dictionary
+    and checks for the key name, adds a digit to the end
+    until a unique key has been created.
+
+    :param string name: desired key name
+    :param dict dic: the dictionary to search through
+    :returns string: a unique key name for dic
+    """
+    i = 0
+    while dic.has_key(name + '_' + str(i)): 
+        i += 1
+
+    return name + '_' + str(i)
+

@@ -34,14 +34,6 @@ class Filter:
         self.value = theano.shared(value, name=name)
         self.name = name
 
-    def set_source(self, source):
-        """Set the source of data for this filter
-
-        :param source:
-        :type source:
-        """
-        self.source = source
-
     def update(self, dt):
         """
         :param float dt: the timestep of the update
