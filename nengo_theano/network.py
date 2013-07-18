@@ -136,6 +136,12 @@ class Network(object):
         # as adding a new node requires rebuilding the theano function 
         self.theano_tick = None  
 
+        # see if a termination name was specified
+        # right now only relevant for SimpleNodes
+        post_split = post.split(':'); 
+        post = post_split[0]; 
+        if len(post_split) > 1: term_name = post_split[1]
+
         # get post Node object from node dictionary
         post = self.get_object(post)
 
@@ -154,11 +160,16 @@ class Network(object):
             assert ((weight == 1) and (index_pre is None)
                     and (index_post is None))
 
+        if isinstance(post, simplenode.SimpleNode): 
+            assert index_post is None
+            dim_post = post.dimensions[term_name]
+        else: dim_post = post.dimensions
+
         # if decoded-decoded connection (case 1)
         # compute transform if not given, if given make sure shape is correct
         transform = helpers.compute_transform(
             dim_pre=dim_pre,
-            dim_post=post.dimensions,
+            dim_post=dim_post,
             array_size=post.array_size,
             weight=weight,
             index_pre=index_pre,
@@ -171,8 +182,12 @@ class Network(object):
 
         # pass in the pre population decoded output function
         # to the post population, connecting them for theano
-        post.add_termination(name=pre_name, pstc=pstc, 
-            decoded_input=decoded_output) 
+        if isinstance(post, simplenode.SimpleNode):
+            post.set_input_source(name=term_name, pstc=pstc,
+                source=decoded_output)
+        else: 
+            post.add_termination(name=pre_name, pstc=pstc, 
+                decoded_input=decoded_output) 
    
     def connect_neurons(self, pre, post, weight_matrix, pstc=0.01,
             func=None):
@@ -278,101 +293,6 @@ class Network(object):
         post.add_termination(name=pre_name, pstc=pstc, 
             encoded_input=encoded_output)
  
-    def connect_to_node(self, pre, post, pstc=0.001, transform=None, 
-                        weight=1, index_pre=None, func=None):
-        """Connect to a SimpleNode in the network.
-        
-        Note: cannot specify (transform) AND any of
-        (weight, index_pre, index_post).
-
-        *pre* and *post* can be strings giving the names of the nodes,
-        or they can be the nodes themselves (Inputs and Ensembles are
-        supported). They can also be actual Origins or Terminations,
-        or any combination of the above. 
-
-        If transform is not None, it is used as the transformation matrix
-        for the new termination. You can also use *weight*, *index_pre*,
-        and *index_post* to define a transformation matrix instead.
-        *weight* gives the value, and *index_pre* and *index_post*
-        identify which dimensions to connect.
-        
-        If *func* is not None, a new Origin will be created on the
-        pre-synaptic ensemble that will compute the provided function.
-        The name of this origin will be taken from the name of
-        the function, or *origin_name*, if provided. If an
-        origin with that name already exists, the existing origin
-        will be used rather than creating a new one.
-
-        :param string pre: Name of the node to connect from.
-        :param string post: Name of the node:Name of input to connect to.
-        :param transform:
-            The linear transfom matrix to apply across the connection.
-            If *transform* is T and *pre* represents ``x``,
-            then the connection will cause *post* to represent ``Tx``.
-            Should be an N by M array, where N is the dimensionality
-            of *post* and M is the dimensionality of *pre*.
-        :type transform: array of floats
-        :param index_pre:
-            The indexes of the pre-synaptic dimensions to use.
-            Ignored if *transform* is not None.
-            See :func:`helpers.compute_transform()`
-        :param float weight:
-            Scaling factor for a transformation defined with
-            *index_pre* and *index_post*.
-            Ignored if *transform* is not None.
-            See :func:`helpers.compute_transform()`
-        :type index_pre: List of integers or a single integer
-        :param function func:
-            Function to be computed by this connection.
-            If None, computes ``f(x)=x``.
-            The function takes a single parameter ``x``, which is
-            the current value of the *pre* ensemble, and must return
-            either a float or an array of floats.
-        """
-        # reset timer in case the model has been run,
-        # as adding a new node requires rebuilding the theano function 
-        self.theano_tick = None  
-
-        # split post into SimpleNode name and input name
-        split_name = post.split(':')
-        post = split_name[0]; name = split_name[1]
-        # get post Node object from node dictionary
-        post = self.get_object(post)
-
-        # get the origin from the pre Node
-        pre_origin = self.get_origin(pre, func)
-        # get pre Node object from node dictionary
-        pre_name = pre
-        pre = self.get_object(pre)
-
-        # get decoded_output from specified origin
-        pre_output = pre_origin.decoded_output
-        dim_pre = pre_origin.dimensions 
-      
-        if transform is not None: 
-            # make sure contradicting things aren't simultaneously specified
-            assert ((weight == 1) and (index_pre is None)
-                    and (index_post is None))
-
-        # if decoded-decoded connection (case 1)
-        # compute transform if not given, if given make sure shape is correct
-        transform = helpers.compute_transform(
-            dim_pre=dim_pre,
-            dim_post=post.dimensions[name],
-            array_size=1,
-            weight=weight,
-            index_pre=index_pre,
-            index_post=None, 
-            transform=transform)
-    
-        # apply transform matrix, directing pre dimensions
-        # to specific post dimensions
-        output = TT.dot(transform, pre_output)
-
-        # pass in the pre population decoded output function
-        # to the SimpleNode, connecting them for theano
-        post.set_input_source(name=name, pstc=pstc, source=output) 
-
     def get_object(self, name):
         """This is a method for parsing input to return the proper object.
 

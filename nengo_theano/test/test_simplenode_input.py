@@ -33,7 +33,7 @@ net.make_input('in', values=[1.7685, -.3, .4, -.5])
 net.make('A', neurons=100, array_size=2, dimensions=2)
 
 net.connect('in', 'A')
-net.connect_to_node('A', 'input:input_1')
+net.connect('A', 'input:input_1')
 
 timesteps = 500
 dt_step = 0.001

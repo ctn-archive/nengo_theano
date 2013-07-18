@@ -53,6 +53,7 @@ class SimpleNode(object):
         self.dimensions = {} # tracks dimensions of inputs
         self.input = {}
         self.origin = {}
+        self.array_size = 1
 
         self.init()  # initialize internal variables if there are any
 
