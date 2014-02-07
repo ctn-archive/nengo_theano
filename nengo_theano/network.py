@@ -285,7 +285,7 @@ class Network(object):
         encoded_output = TT.zeros((post.array_size, post.neurons_num),
                                    dtype='float32')
         for ii in xrange(post.neurons_num):
-            encoded_output = TT.basic.set_subtensor(encoded_output[:, ii],
+            encoded_output = TT.set_subtensor(encoded_output[:, ii],
                  TT.dot(weight_matrix[:, ii], pre_output))
 
         # pass in the pre population encoded output function
