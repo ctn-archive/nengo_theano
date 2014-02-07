@@ -231,7 +231,7 @@ class EnsembleOrigin(Origin):
 
         z = TT.zeros((self.ensemble.array_size, self.func_size), dtype='float32')
         for i in range(self.ensemble.array_size):
-            z = TT.basic.set_subtensor(z[i], r / dt * TT.dot(spikes[i], 
+            z = TT.set_subtensor(z[i], r / dt * TT.dot(spikes[i], 
                 self.decoders_shuffled[i].T)) 
 
         return OrderedDict({self.decoded_output: TT.flatten(z)})
